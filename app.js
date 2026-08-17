@@ -187,6 +187,15 @@ function setupButtons() {
         addLog('ACTION', 'Paper wallet reset to initial state ($10,000)');
     });
 
+    document.getElementById('closeAllBtn').addEventListener('click', () => {
+        if (state.positions.length === 0) return;
+        const idsToClose = state.positions.map(p => p.id);
+        idsToClose.forEach(id => {
+            closePosition(id, 'Manual Force Close.');
+        });
+        addLog('ACTION', `Force closed all ${idsToClose.length} active positions.`);
+    });
+
     document.getElementById('pauseLogBtn').addEventListener('click', function() {
         state.logPaused = !state.logPaused;
         this.innerText = state.logPaused ? "▶ Resume" : "⏸ Pause";
