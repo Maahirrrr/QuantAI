@@ -227,7 +227,7 @@ function toggleAutoTrade() {
     }
 }
 
-async function executeAutoTradeLogic() {
+   async function executeAutoTradeLogic() {
     addLog('SIGNAL', `Auto-evaluating live data via Python Quant Backend for ${state.currentAsset.display}...`);
     
     try {
@@ -240,12 +240,38 @@ async function executeAutoTradeLogic() {
             addLog('SIGNAL', `[Backend Stats] RSI: ${data.rsi} | Reason: ${data.reason}`);
             setConfidence(data.confidence);
             
+            const activePositions = state.positions.filter(p => p.asset === state.currentAsset.display);
+            
+            // Autonomous Budget Sizing
+            const budgetSelection = document.getElementById('autoTradeBudget').value;
+            let targetBudgetUsd = budgetSelection === 'MAX' ? state.balance : parseFloat(budgetSelection);
+            if (targetBudgetUsd > state.balance) targetBudgetUsd = state.balance;
+            
+            // Size scaled by confidence (e.g. 80% conf = 80% of budget)
+            const tradeSizeUsd = targetBudgetUsd * (data.confidence / 100);
+            
             if (data.signal === 'LONG') {
-                addLog('EXEC', `[Auto Trade] Statistical edge detected -> Executing BUY.`);
-                executeTrade('LONG');
+                // Auto-Close Shorts
+                activePositions.forEach(p => {
+                    if (p.side === 'SHORT') closePosition(p.id, 'Auto-closed SHORT due to bullish reversal signal.');
+                });
+                
+                if (tradeSizeUsd > 10) {
+                    addLog('EXEC', `[Auto Trade] Statistical edge detected. Sizing: $${tradeSizeUsd.toFixed(2)} -> Executing BUY.`);
+                    executeTrade('LONG', tradeSizeUsd);
+                }
+                
             } else if (data.signal === 'SHORT') {
-                addLog('EXEC', `[Auto Trade] Statistical edge detected -> Executing SELL.`);
-                executeTrade('SHORT');
+                // Auto-Close Longs
+                activePositions.forEach(p => {
+                    if (p.side === 'LONG') closePosition(p.id, 'Auto-closed LONG due to bearish reversal signal.');
+                });
+                
+                if (tradeSizeUsd > 10) {
+                    addLog('EXEC', `[Auto Trade] Statistical edge detected. Sizing: $${tradeSizeUsd.toFixed(2)} -> Executing SELL.`);
+                    executeTrade('SHORT', tradeSizeUsd);
+                }
+                
             } else {
                 addLog('ACTION', `[Auto Trade] Neutral signals. Holding current positions.`);
             }
@@ -255,6 +281,30 @@ async function executeAutoTradeLogic() {
     } catch (error) {
         addLog('ERROR', `Auto-Trade paused. Backend unreachable. Please run the python server.`);
         toggleAutoTrade(); // Automatically disable auto trade if backend dies
+    }
+}
+
+function closePosition(id, reason) {
+    const idx = state.positions.findIndex(p => p.id === id);
+    if (idx > -1) {
+        const p = state.positions[idx];
+        let pnl = 0;
+        if(p.side === 'LONG') {
+            pnl = (p.currentPrice - p.entryPrice) * p.size;
+        } else {
+            pnl = (p.entryPrice - p.currentPrice) * p.size;
+        }
+        
+        // Return original margin + pnl
+        state.balance += (p.size * p.entryPrice) + pnl; 
+        state.positions.splice(idx, 1);
+        
+        const pnlPrefix = pnl >= 0 ? '+$' : '-$';
+        addLog('EXEC', `Closed ${p.side} on ${p.asset}. PNL: ${pnlPrefix}${Math.abs(pnl).toFixed(2)}. ${reason}`);
+        
+        saveState();
+        updateWalletDisplay();
+        renderPositions();
     }
 }
 
@@ -268,6 +318,41 @@ function addRipple(e, button) {
     ripple.style.top = `${e.clientY - rect.top - size/2}px`;
     button.appendChild(ripple);
     setTimeout(() => ripple.remove(), 300);
+}
+
+function executeTrade(side, forceSizeUsd = null) {
+    const price = state.currentAsset.price;
+    let sizeUsd = forceSizeUsd;
+    
+    if (!sizeUsd) {
+        sizeUsd = state.balance * 0.1; // Default manual size if not auto-trade
+    }
+    
+    if (sizeUsd > state.balance) {
+        sizeUsd = state.balance;
+    }
+    
+    if (sizeUsd <= 0) {
+        addLog('ERROR', 'Insufficient balance to execute trade.');
+        return;
+    }
+    
+    const sizeAsset = sizeUsd / price;
+    
+    state.positions.push({
+        id: Math.random().toString(36).substr(2, 9),
+        asset: state.currentAsset.display,
+        side: side,
+        entryPrice: price,
+        size: sizeAsset,
+        currentPrice: price
+    });
+    
+    state.balance -= sizeUsd;
+    saveState();
+    updateWalletDisplay();
+    renderPositions();
+    addLog('EXEC', `Filled ${side} ${state.currentAsset.display} @ $${price.toLocaleString()} (Size: $${sizeUsd.toLocaleString(undefined, {maximumFractionDigits:2})})`);
 }
 
 function toggleAssetModal(show) {

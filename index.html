@@ -151,6 +151,18 @@
                         <button class="ghost-btn execute-sell" id="execSellBtn">Execute SELL</button>
                     </div>
 
+                    <div class="auto-trade-config">
+                        <div class="budget-selector">
+                            <span class="label">Auto Budget:</span>
+                            <select id="autoTradeBudget" class="budget-dropdown">
+                                <option value="1000">$1,000 / trade</option>
+                                <option value="2000" selected>$2,000 / trade</option>
+                                <option value="5000">$5,000 / trade</option>
+                                <option value="MAX">Max Available</option>
+                            </select>
+                        </div>
+                    </div>
+                    
                     <div class="auto-trade-wrapper">
                         <button class="auto-trade-btn" id="autoTradeBtn">
                             <div class="status-dot"></div>

@@ -576,13 +576,45 @@ button:focus-visible, input:focus-visible {
 }
 
 /* Auto Trade */
+.auto-trade-config {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.budget-selector {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.budget-selector .label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.budget-dropdown {
+    background-color: var(--bg-base);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: var(--font-body);
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.budget-dropdown:focus {
+    border-color: var(--accent-primary);
+}
+
 .auto-trade-wrapper {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
 }
 
 .auto-trade-btn {
