@@ -15,9 +15,9 @@ const state = {
     tvWidget: null,
     lastUpdateMs: Date.now(),
     autoTradeActive: false,
-    autoTradeCountdown: 30,
-    autoTradeCountdownInterval: null
 };
+
+const priceHistory = [];
 
 // Universe
 const assets = [
@@ -226,19 +226,31 @@ function toggleAutoTrade() {
 }
 
 async function executeHFTLogic() {
-    // 1. Relentless Profit Taking (Close any position > $0.05 profit immediately)
+    const activePositions = state.positions.filter(p => p.asset === state.currentAsset.display);
+    
+    // 1. Realistic Risk Management (Strict Stop-Loss & Take-Profit with Fees)
     state.positions.forEach(p => {
-        let pnl = 0;
-        if(p.side === 'LONG') pnl = (p.currentPrice - p.entryPrice) * p.size;
-        else pnl = (p.entryPrice - p.currentPrice) * p.size;
+        let grossPnl = 0;
+        if(p.side === 'LONG') grossPnl = (p.currentPrice - p.entryPrice) * p.size;
+        else grossPnl = (p.entryPrice - p.currentPrice) * p.size;
         
-        if (pnl > 0.05) {
-            closePosition(p.id, `HFT micro-profit locked in.`);
+        const positionValue = p.size * p.currentPrice;
+        const entryFee = (p.size * p.entryPrice) * 0.001; // 0.1% entry fee
+        const exitFee = positionValue * 0.001;            // 0.1% exit fee
+        
+        const netPnl = grossPnl - entryFee - exitFee;
+        const pnlPct = netPnl / (p.size * p.entryPrice);
+        
+        // Take Profit (+0.25% NET) | Stop Loss (-0.40% NET)
+        if (pnlPct > 0.0025) {
+            closePosition(p.id, `Take-Profit hit (+${(pnlPct*100).toFixed(2)}% net).`);
+        } else if (pnlPct < -0.0040) {
+            closePosition(p.id, `Stop-Loss triggered (${(pnlPct*100).toFixed(2)}% net).`);
         }
     });
 
     const now = Date.now();
-    // 2. Poll Backend every 15s to get the macro statistical bias (preventing IP bans)
+    // 2. Poll Backend every 15s for Macro Signal
     if (now - lastBackendFetch > 15000) {
         try {
             const response = await fetch(`http://127.0.0.1:8000/api/analyze?symbol=${encodeURIComponent(state.currentAsset.symbol)}`);
@@ -249,42 +261,35 @@ async function executeHFTLogic() {
                     state.currentAsset.price = data.current_price;
                 }
             }
-        } catch(e) {
-            // Silently ignore to guarantee the bot NEVER stops
-        }
+        } catch(e) {}
         lastBackendFetch = now;
     }
 
-    // 3. High-Frequency Market Making
-    const activePositions = state.positions.filter(p => p.asset === state.currentAsset.display);
-    
-    // Only open new trades if we have less than 15 active (to prevent burning all cash)
-    if (activePositions.length < 15 && state.balance > 10) {
+    // 3. Algorithmic Entry Logic (No Spamming - strictly one active position per asset)
+    if (activePositions.length === 0 && state.balance > 10) {
         const budgetSelection = document.getElementById('autoTradeBudget').value;
         let targetBudgetUsd = budgetSelection === 'MAX' ? state.balance : parseFloat(budgetSelection);
         if (targetBudgetUsd > state.balance) targetBudgetUsd = state.balance;
-        
-        // HFT uses tiny slices of the budget per second
-        let tradeSizeUsd = targetBudgetUsd * 0.10; 
-        if (tradeSizeUsd < 5) tradeSizeUsd = 5; // Minimum trade size
-        if (tradeSizeUsd > state.balance) tradeSizeUsd = state.balance;
 
         let signal = 'HOLD';
         
-        // Bias trades based on backend trend, or randomly scalp
-        if (lastBackendData && lastBackendData.signal === 'LONG') {
-            signal = Math.random() > 0.2 ? 'LONG' : 'HOLD'; // 80% chance to buy
-        } else if (lastBackendData && lastBackendData.signal === 'SHORT') {
-            signal = Math.random() > 0.2 ? 'SHORT' : 'HOLD';
+        // Prioritize Backend macro trend
+        if (lastBackendData && lastBackendData.signal !== 'HOLD') {
+            signal = lastBackendData.signal;
         } else {
-            // Total random noise scalping
-            const r = Math.random();
-            if (r > 0.6) signal = 'LONG';
-            else if (r < 0.4) signal = 'SHORT';
+            // Internal Scalper: Wait for a valid breakout from the 5-tick moving average
+            const price = state.currentAsset.price;
+            if (priceHistory.length >= 5) {
+                const sma5 = priceHistory.slice(-5).reduce((a,b)=>a+b, 0) / 5;
+                if (price > sma5 * 1.0003) signal = 'LONG';
+                else if (price < sma5 * 0.9997) signal = 'SHORT';
+            }
         }
         
-        if (signal === 'LONG') executeTrade('LONG', tradeSizeUsd);
-        if (signal === 'SHORT') executeTrade('SHORT', tradeSizeUsd);
+        if (signal !== 'HOLD') {
+            executeTrade(signal, targetBudgetUsd);
+            addLog('SIGNAL', `[Algo] Breakout detected. Executing ${signal} using strict risk parameters.`);
+        }
     }
 }
 
@@ -292,19 +297,21 @@ function closePosition(id, reason) {
     const idx = state.positions.findIndex(p => p.id === id);
     if (idx > -1) {
         const p = state.positions[idx];
-        let pnl = 0;
-        if(p.side === 'LONG') {
-            pnl = (p.currentPrice - p.entryPrice) * p.size;
-        } else {
-            pnl = (p.entryPrice - p.currentPrice) * p.size;
-        }
+        let grossPnl = 0;
+        if(p.side === 'LONG') grossPnl = (p.currentPrice - p.entryPrice) * p.size;
+        else grossPnl = (p.entryPrice - p.currentPrice) * p.size;
         
-        // Return original margin + pnl
-        state.balance += (p.size * p.entryPrice) + pnl; 
+        const positionValue = p.size * p.currentPrice;
+        const exitFee = positionValue * 0.001;
+        const entryFee = (p.size * p.entryPrice) * 0.001;
+        const netPnl = grossPnl - entryFee - exitFee;
+        
+        // Return margin + net pnl
+        state.balance += (p.size * p.entryPrice) + grossPnl - exitFee; 
         state.positions.splice(idx, 1);
         
-        const pnlPrefix = pnl >= 0 ? '+$' : '-$';
-        addLog('EXEC', `Closed ${p.side} on ${p.asset}. PNL: ${pnlPrefix}${Math.abs(pnl).toFixed(2)}. ${reason}`);
+        const pnlPrefix = netPnl >= 0 ? '+$' : '-$';
+        addLog('EXEC', `Closed ${p.side} on ${p.asset}. Net PNL: ${pnlPrefix}${Math.abs(netPnl).toFixed(2)}. ${reason}`);
         
         saveState();
         updateWalletDisplay();
@@ -328,20 +335,13 @@ function executeTrade(side, forceSizeUsd = null) {
     const price = state.currentAsset.price;
     let sizeUsd = forceSizeUsd;
     
-    if (!sizeUsd) {
-        sizeUsd = state.balance * 0.1; // Default manual size if not auto-trade
-    }
+    if (!sizeUsd) sizeUsd = state.balance * 0.1;
+    if (sizeUsd > state.balance) sizeUsd = state.balance;
+    if (sizeUsd <= 0) return;
     
-    if (sizeUsd > state.balance) {
-        sizeUsd = state.balance;
-    }
-    
-    if (sizeUsd <= 0) {
-        addLog('ERROR', 'Insufficient balance to execute trade.');
-        return;
-    }
-    
-    const sizeAsset = sizeUsd / price;
+    const fee = sizeUsd * 0.001; // 0.1% Exchange Fee
+    const netInvestment = sizeUsd - fee;
+    const sizeAsset = netInvestment / price;
     
     state.positions.push({
         id: Math.random().toString(36).substr(2, 9),
@@ -356,7 +356,7 @@ function executeTrade(side, forceSizeUsd = null) {
     saveState();
     updateWalletDisplay();
     renderPositions();
-    addLog('EXEC', `Filled ${side} ${state.currentAsset.display} @ $${price.toLocaleString()} (Size: $${sizeUsd.toLocaleString(undefined, {maximumFractionDigits:2})})`);
+    addLog('EXEC', `Filled ${side} ${state.currentAsset.display} @ $${price.toLocaleString()} (Size: $${netInvestment.toFixed(2)}, Fee: $${fee.toFixed(2)})`);
 }
 
 function toggleAssetModal(show) {
@@ -506,11 +506,16 @@ function addLog(type, message) {
 function updateWalletDisplay() {
     let total = state.balance;
     state.positions.forEach(p => {
+        let grossPnl = 0;
         if(p.side === 'LONG') {
-            total += (p.size * p.currentPrice);
+            grossPnl = (p.currentPrice - p.entryPrice) * p.size;
         } else {
-            total += (p.size * p.entryPrice) + (p.size * (p.entryPrice - p.currentPrice));
+            grossPnl = (p.entryPrice - p.currentPrice) * p.size;
         }
+        
+        const positionValue = p.size * p.currentPrice;
+        const exitFee = positionValue * 0.001;
+        total += (p.size * p.entryPrice) + grossPnl - exitFee;
     });
     
     document.getElementById('walletBalance').innerText = `$${total.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
@@ -521,15 +526,20 @@ function renderPositions() {
     tbody.innerHTML = '';
     
     state.positions.slice(-8).forEach(p => {
-        let pnl = 0;
+        let grossPnl = 0;
         if(p.side === 'LONG') {
-            pnl = (p.currentPrice - p.entryPrice) * p.size;
+            grossPnl = (p.currentPrice - p.entryPrice) * p.size;
         } else {
-            pnl = (p.entryPrice - p.currentPrice) * p.size;
+            grossPnl = (p.entryPrice - p.currentPrice) * p.size;
         }
         
-        const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-        const pnlPrefix = pnl >= 0 ? '▲' : '▼';
+        const positionValue = p.size * p.currentPrice;
+        const entryFee = (p.size * p.entryPrice) * 0.001;
+        const exitFee = positionValue * 0.001;
+        const netPnl = grossPnl - entryFee - exitFee;
+        
+        const pnlClass = netPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+        const pnlPrefix = netPnl >= 0 ? '▲' : '▼';
         
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -537,7 +547,7 @@ function renderPositions() {
             <td><span class="badge-${p.side.toLowerCase()}">${p.side}</span></td>
             <td>$${p.entryPrice.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
             <td>${p.size.toFixed(4)}</td>
-            <td class="pnl-col ${pnlClass}">${pnlPrefix} $${Math.abs(pnl).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+            <td class="pnl-col ${pnlClass}">${pnlPrefix} $${Math.abs(netPnl).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -556,6 +566,9 @@ function startMarketSimulation() {
         const vol = 0.0005; // 0.05% vol per tick
         state.currentAsset.price *= (1 + (Math.random() - 0.5) * vol);
         state.lastUpdateMs = now;
+        
+        priceHistory.push(state.currentAsset.price);
+        if (priceHistory.length > 20) priceHistory.shift();
         
         let pnlChanged = false;
         let todaysPnl = 0;
