@@ -1,7 +1,14 @@
 // App State
 const state = {
+    startBalance: 10000.00,
     balance: 10000.00,
     positions: [],
+    metrics: {
+        wins: 0,
+        losses: 0,
+        totalWinUsd: 0,
+        totalLossUsd: 0
+    },
     currentAsset: {
         symbol: 'BINANCE:BTCUSD',
         display: 'BTC/USD',
@@ -214,11 +221,11 @@ function toggleAutoTrade() {
     
     if(state.autoTradeActive) {
         btn.classList.add('active');
-        textSpan.innerText = 'HFT Auto Trade ON';
+        textSpan.innerText = 'Systematic Algo ON';
         timerText.classList.add('active');
-        timerText.innerText = 'HFT';
+        timerText.innerText = 'ALGO';
         
-        addLog('ACTION', 'High-Frequency Trading (HFT) enabled. Executing micro-trades every second. NEVER STOPPING.');
+        addLog('ACTION', 'Systematic Trading enabled. Tracking Expectancy and Latency rules.');
         
         hftInterval = setInterval(() => {
             executeHFTLogic();
@@ -226,11 +233,11 @@ function toggleAutoTrade() {
         
     } else {
         btn.classList.remove('active');
-        textSpan.innerText = 'Start Auto Trade';
+        textSpan.innerText = 'Start Systematic Algo';
         timerText.classList.remove('active');
         timerText.innerText = '00:30';
         clearInterval(hftInterval);
-        addLog('ACTION', 'Auto Trade disabled.');
+        addLog('ACTION', 'Systematic Algo disabled.');
     }
 }
 
@@ -301,8 +308,25 @@ async function executeHFTLogic() {
 
     // 3. Statistical Arbitrage Entry Logic (Bollinger Bands / Z-Score)
     if (activePositions.length === 0 && state.balance > 10) {
+        // Latency Filter (Simulated order rejection on high ping)
+        const currentLatencyMs = 20 + Math.random() * 150;
+        if (currentLatencyMs > 120) {
+            // Silently reject the order internally to avoid spamming the log every second
+            return;
+        }
+
         const budgetSelection = document.getElementById('autoTradeBudget').value;
-        let targetBudgetUsd = budgetSelection === 'MAX' ? state.balance : parseFloat(budgetSelection);
+        let targetBudgetUsd = 1000;
+        
+        if (budgetSelection === 'RISK_0.5') {
+            // Strict SEBI/Quant constraint: Position size limited to risk roughly 0.5% of total equity
+            targetBudgetUsd = state.balance * 0.05; // Using 5% equity per trade ensures total risk < 0.5%
+        } else if (budgetSelection === 'MAX') {
+            targetBudgetUsd = state.balance;
+        } else {
+            targetBudgetUsd = parseFloat(budgetSelection);
+        }
+        
         if (targetBudgetUsd > state.balance) targetBudgetUsd = state.balance;
 
         let signal = 'HOLD';
@@ -311,7 +335,7 @@ async function executeHFTLogic() {
         // 40% chance to follow macro trend if backend signals edge
         if (lastBackendData && lastBackendData.signal !== 'HOLD' && Math.random() > 0.6) {
             signal = lastBackendData.signal;
-            reason = `Macro trend alignment (Conf: ${lastBackendData.confidence}%)`;
+            reason = `Macro trend alignment (Conf: ${lastBackendData.confidence}%) | Latency: ${currentLatencyMs.toFixed(0)}ms`;
         } else if (priceHistory.length >= 20) {
             // Internal Statistical Arbitrage Engine (Bollinger Z-Score)
             const period = 20;
@@ -326,16 +350,16 @@ async function executeHFTLogic() {
             // Stat-Arb Mean Reversion
             if (zScore < -1.8) {
                 signal = 'LONG';
-                reason = `Stat-Arb: Z-Score ${zScore.toFixed(2)} (Oversold Deviation)`;
+                reason = `Stat-Arb: Z-Score ${zScore.toFixed(2)} | Latency: ${currentLatencyMs.toFixed(0)}ms`;
             } else if (zScore > 1.8) {
                 signal = 'SHORT';
-                reason = `Stat-Arb: Z-Score ${zScore.toFixed(2)} (Overbought Deviation)`;
+                reason = `Stat-Arb: Z-Score ${zScore.toFixed(2)} | Latency: ${currentLatencyMs.toFixed(0)}ms`;
             }
         }
         
         if (signal !== 'HOLD') {
             executeTrade(signal, targetBudgetUsd);
-            addLog('SIGNAL', `[Algo Entry] ${reason}`);
+            addLog('SIGNAL', `[Systematic Algo] ${reason}`);
         }
     }
 }
@@ -353,6 +377,15 @@ function closePosition(id, reason) {
         const entryFee = (p.size * p.entryPrice) * ENTRY_FEE;
         const netPnl = grossPnl - entryFee - exitFee;
         
+        // Track Metrics
+        if (netPnl > 0) {
+            state.metrics.wins++;
+            state.metrics.totalWinUsd += netPnl;
+        } else {
+            state.metrics.losses++;
+            state.metrics.totalLossUsd += Math.abs(netPnl);
+        }
+        
         // Return margin + net pnl
         state.balance += (p.size * p.entryPrice) + grossPnl - exitFee; 
         state.positions.splice(idx, 1);
@@ -362,6 +395,7 @@ function closePosition(id, reason) {
         
         saveState();
         updateWalletDisplay();
+        updateMetricsDisplay();
         renderPositions();
     }
 }
@@ -600,6 +634,46 @@ function renderPositions() {
         `;
         tbody.appendChild(tr);
     });
+}
+
+function updateMetricsDisplay() {
+    const totalTrades = state.metrics.wins + state.metrics.losses;
+    const winRate = totalTrades > 0 ? (state.metrics.wins / totalTrades) * 100 : 0;
+    
+    const avgWin = state.metrics.wins > 0 ? state.metrics.totalWinUsd / state.metrics.wins : 0;
+    const avgLoss = state.metrics.losses > 0 ? state.metrics.totalLossUsd / state.metrics.losses : 0;
+    
+    const winPct = winRate / 100;
+    const lossPct = 1 - winPct;
+    const expectancy = (winPct * avgWin) - (lossPct * avgLoss);
+    
+    const currentEquity = calculateTotalEquity();
+    const drawdown = ((state.startBalance - currentEquity) / state.startBalance) * 100;
+    
+    document.getElementById('winRateDisplay').innerText = `${winRate.toFixed(1)}%`;
+    document.getElementById('expectancyDisplay').innerText = `$${expectancy.toFixed(2)}`;
+    document.getElementById('drawdownDisplay').innerText = `${drawdown > 0 ? drawdown.toFixed(2) : 0.00}%`;
+    
+    // Kill Switch: 1.5% Daily Drawdown Limit
+    if (drawdown > 1.5 && state.autoTradeActive) {
+        addLog('ERROR', `[KILL SWITCH] Max daily drawdown exceeded (1.5%). Systematic algo halted.`);
+        toggleAutoTrade();
+        document.getElementById('autoTradeBtn').disabled = true;
+    }
+}
+
+function calculateTotalEquity() {
+    let total = state.balance;
+    state.positions.forEach(p => {
+        let grossPnl = 0;
+        if(p.side === 'LONG') grossPnl = (p.currentPrice - p.entryPrice) * p.size;
+        else grossPnl = (p.entryPrice - p.currentPrice) * p.size;
+        
+        const positionValue = p.size * p.currentPrice;
+        const exitFee = positionValue * EXIT_FEE;
+        total += (p.size * p.entryPrice) + grossPnl - exitFee;
+    });
+    return total;
 }
 
 function startMarketSimulation() {

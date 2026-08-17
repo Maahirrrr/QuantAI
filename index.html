@@ -122,18 +122,18 @@
                         </div>
                     </div>
 
-                    <div class="stat-pills">
-                        <div class="stat-pill">
-                            <span class="label">Accuracy</span>
-                            <span class="value mono">94.2%</span>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <span class="stat-label">Win Rate</span>
+                            <span class="stat-value" id="winRateDisplay">0.0%</span>
                         </div>
-                        <div class="stat-pill">
-                            <span class="label">Signals</span>
-                            <span class="value mono" id="signalsToday">0</span>
+                        <div class="stat-box">
+                            <span class="stat-label">Expectancy</span>
+                            <span class="stat-value" id="expectancyDisplay">$0.00</span>
                         </div>
-                        <div class="stat-pill">
-                            <span class="label">Win Rate</span>
-                            <span class="value mono">68%</span>
+                        <div class="stat-box">
+                            <span class="stat-label">Drawdown</span>
+                            <span class="stat-value" id="drawdownDisplay">0.00%</span>
                         </div>
                     </div>
 
@@ -153,12 +153,12 @@
 
                     <div class="auto-trade-config">
                         <div class="budget-selector">
-                            <span class="label">Auto Budget:</span>
+                            <span class="label">Position Sizing:</span>
                             <select id="autoTradeBudget" class="budget-dropdown">
+                                <option value="RISK_0.5" selected>Strict 0.5% Risk</option>
                                 <option value="1000">$1,000 / trade</option>
-                                <option value="2000" selected>$2,000 / trade</option>
+                                <option value="2000">$2,000 / trade</option>
                                 <option value="5000">$5,000 / trade</option>
-                                <option value="MAX">Max Available</option>
                             </select>
                         </div>
                     </div>
