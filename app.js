@@ -412,7 +412,17 @@ async function executeHFTLogic() {
             // Dynamic Position Sizing based on Kelly / UI Selection
             const budgetSelection = document.getElementById('autoTradeBudget').value;
             let targetBudgetUsd = 1000;
-            if (budgetSelection === 'RISK_0.5') {
+            if (budgetSelection === 'KELLY') {
+                const totalTrades = Math.max(1, state.metrics.wins + state.metrics.losses);
+                const W = state.metrics.wins / totalTrades;
+                const avgWin = state.metrics.wins > 0 ? state.metrics.totalWinUsd / state.metrics.wins : 0.01;
+                const avgLoss = state.metrics.losses > 0 ? state.metrics.totalLossUsd / state.metrics.losses : 0.01;
+                const R = avgWin / avgLoss;
+                let kellyPct = 0;
+                if (W > 0 && R > 0) kellyPct = W - ((1 - W) / R);
+                kellyPct = Math.max(0.01, Math.min(kellyPct, 0.10));
+                targetBudgetUsd = state.balance * kellyPct;
+            } else if (budgetSelection === 'RISK_0.5') {
                 targetBudgetUsd = state.balance * 0.05; // Using 5% for better demonstration
             } else if (budgetSelection === 'MAX') {
                 targetBudgetUsd = state.balance;

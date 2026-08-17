@@ -1,8 +1,10 @@
 :root {
-    --bg-base: #0A0B0E;
-    --bg-surface: #10131A;
+    --bg-base: #050507;
+    --glass-bg: rgba(16, 19, 26, 0.4);
+    --glass-border: rgba(255, 255, 255, 0.05);
+    --bg-surface: var(--glass-bg);
     --bg-elevated: #161B26;
-    --border: #1E2535;
+    --border: var(--glass-border);
     --accent-primary: #7C3AED;
     --accent-buy: #00D97E;
     --accent-sell: #FF4560;
@@ -11,7 +13,7 @@
     --text-secondary: #8B95A9;
     --text-muted: #4A5568;
     
-    --font-display: 'Space Grotesk', sans-serif;
+    --font-display: 'Inter', system-ui, sans-serif;
     --font-body: 'Inter', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
 }
@@ -57,6 +59,9 @@ button:focus-visible, input:focus-visible {
 
 /* LEFT NAV */
 .left-nav {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    background: var(--glass-bg);
     width: 56px;
     background-color: var(--bg-base);
     border-right: 1px solid var(--border);
@@ -313,6 +318,11 @@ button:focus-visible, input:focus-visible {
 
 /* RIGHT PANEL */
 .right-panel {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    background: var(--glass-bg);
+    border-left: 1px solid var(--glass-border);
+    box-shadow: -10px 0 30px rgba(0,0,0,0.5);
     width: 320px;
     background-color: var(--bg-surface);
     border-left: 1px solid var(--border);
@@ -638,9 +648,11 @@ button:focus-visible, input:focus-visible {
 }
 
 .auto-trade-btn.active {
-    background-color: rgba(0, 217, 126, 0.1);
-    border-color: rgba(0, 217, 126, 0.3);
-    color: var(--accent-buy);
+    background: linear-gradient(135deg, rgba(0, 217, 126, 0.15), rgba(0, 217, 126, 0.05));
+    border-color: rgba(0, 217, 126, 0.4);
+    color: #00FF9D;
+    box-shadow: 0 0 15px rgba(0, 217, 126, 0.2) inset, 0 0 10px rgba(0, 217, 126, 0.1);
+    text-shadow: 0 0 8px rgba(0, 217, 126, 0.4);
 }
 
 .auto-trade-btn .status-dot {
@@ -736,6 +748,8 @@ button:focus-visible, input:focus-visible {
 
 /* Signal Log Section */
 .signal-log-section {
+    backdrop-filter: blur(16px);
+    background: transparent;
     height: 160px;
     display: flex;
     flex-direction: column;
@@ -875,6 +889,11 @@ button:focus-visible, input:focus-visible {
 /* Responsive */
 @media (max-width: 1280px) {
     .right-panel {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    background: var(--glass-bg);
+    border-left: 1px solid var(--glass-border);
+    box-shadow: -10px 0 30px rgba(0,0,0,0.5);
         position: fixed;
         right: -320px;
         top: 0;
@@ -890,6 +909,9 @@ button:focus-visible, input:focus-visible {
 
 @media (max-width: 900px) {
     .left-nav {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    background: var(--glass-bg);
         flex-direction: row;
         width: 100%;
         height: 56px;
@@ -916,31 +938,70 @@ button:focus-visible, input:focus-visible {
         transition: none !important;
     }
 }
-.ob-row {
-    position: relative;
-    display: flex;
-    justify-content: space-between;
-    padding: 2px 8px;
-    font-size: 11px;
-    font-family: 'JetBrains Mono', monospace;
-    z-index: 1;
-}
-
-.ob-bg {
-    position: absolute;
-    right: 0;
-    top: 0;
-    height: 100%;
-    z-index: 0;
-    opacity: 0.15;
-}
-
-.ob-text {
-    z-index: 1;
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-}
-
-.pnl-positive .ob-bg { background: var(--accent-buy); }
-.pnl-negative .ob-bg { background: var(--accent-sell); }
+.ob-row {
+
+    position: relative;
+
+    display: flex;
+
+    justify-content: space-between;
+
+    padding: 2px 8px;
+
+    font-size: 11px;
+
+    font-family: 'JetBrains Mono', monospace;
+
+    z-index: 1;
+
+}
+
+
+
+.ob-bg {
+
+    position: absolute;
+
+    right: 0;
+
+    top: 0;
+
+    height: 100%;
+
+    z-index: 0;
+
+    opacity: 0.15;
+
+}
+
+
+
+.ob-text {
+
+    z-index: 1;
+
+    display: flex;
+
+    justify-content: space-between;
+
+    width: 100%;
+
+}
+
+
+
+.pnl-positive .ob-bg { background: var(--accent-buy); }
+
+.pnl-negative .ob-bg { background: var(--accent-sell); }
+
+
+.ob-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+    cursor: crosshair;
+}
+.ob-bg {
+    transition: width 0.2s ease-out;
+    border-radius: 2px 0 0 2px;
+}
+.pnl-positive .ob-bg { background: linear-gradient(90deg, transparent, rgba(0, 217, 126, 0.25)); border-right: 1px solid rgba(0, 217, 126, 0.5); }
+.pnl-negative .ob-bg { background: linear-gradient(90deg, transparent, rgba(255, 69, 96, 0.25)); border-right: 1px solid rgba(255, 69, 96, 0.5); }
