@@ -602,7 +602,7 @@ function renderAssetList() {
 
 function selectAsset(asset) {
     state.currentAsset = asset;
-    document.getElementById('currentTicker').innerText = asset.display;
+    if(document.getElementById('currentTicker')) document.getElementById('currentTicker').innerText = asset.display;
     document.getElementById('assetIcon').src = asset.icon;
     state.tvWidget.chart().setSymbol(asset.symbol);
     addLog('ACTION', `Context switched to ${asset.display} [MCP Feed Active]`);
@@ -650,7 +650,7 @@ async function runAIAnalysis() {
             `;
             
             state.signalsToday++;
-            document.getElementById('signalsToday').innerText = state.signalsToday;
+            if(document.getElementById('signalsToday')) document.getElementById('signalsToday').innerText = state.signalsToday;
         } else {
             throw new Error(data.message);
         }
@@ -663,7 +663,7 @@ async function runAIAnalysis() {
 }
 
 function setConfidence(val) {
-    document.getElementById('confidenceValue').innerText = `${val}%`;
+    if(document.getElementById('confidenceValue')) document.getElementById('confidenceValue').innerText = `${val}%`;
     const blocks = document.querySelectorAll('.confidence-meter .block');
     const numFilled = Math.round((val / 100) * 5);
     
@@ -720,7 +720,7 @@ function updateWalletDisplay() {
         total += (p.size * p.entryPrice) + grossPnl - exitFee;
     });
     
-    document.getElementById('walletBalance').innerText = `$${total.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    if(document.getElementById('walletBalance')) document.getElementById('walletBalance').innerText = `$${total.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 }
 
 function renderPositions() {
@@ -769,9 +769,9 @@ function updateMetricsDisplay() {
     const currentEquity = calculateTotalEquity();
     const drawdown = ((state.startBalance - currentEquity) / state.startBalance) * 100;
     
-    document.getElementById('winRateDisplay').innerText = `${winRate.toFixed(1)}%`;
-    document.getElementById('expectancyDisplay').innerText = `$${expectancy.toFixed(2)}`;
-    document.getElementById('drawdownDisplay').innerText = `${drawdown > 0 ? drawdown.toFixed(2) : 0.00}%`;
+    if(document.getElementById('winRateDisplay')) document.getElementById('winRateDisplay').innerText = `${winRate.toFixed(1)}%`;
+    if(document.getElementById('expectancyDisplay')) document.getElementById('expectancyDisplay').innerText = `$${expectancy.toFixed(2)}`;
+    if(document.getElementById('drawdownDisplay')) document.getElementById('drawdownDisplay').innerText = `${drawdown > 0 ? drawdown.toFixed(2) : 0.00}%`;
     
     // Kill Switch: 1.5% Daily Drawdown Limit
     if (drawdown > 1.5 && state.autoTradeActive) {
