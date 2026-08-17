@@ -812,7 +812,7 @@ function startMarketSimulation() {
                 
                 if (usdVolume > 200000) { 
                     const side = data.data.m ? 'SELL' : 'BUY';
-                    addLog('WHALE', 🚨 WHALE : {usdVolume.toLocaleString(undefined, {maximumFractionDigits:0})} on );
+                    addLog('WHALE', `🚨 WHALE ${side}: $${usdVolume.toLocaleString(undefined, {maximumFractionDigits:0})}`);
                 }
             } else if (stream.includes('@depth')) {
                 if (state.currentAsset.symbol === 'BINANCE:BTCUSD' && typeof renderOrderBook === 'function') {
@@ -941,7 +941,7 @@ async function fetchFearAndGreed() {
         const fng = data.data[0];
         const badge = document.getElementById('sentimentBadge');
         if(badge) {
-            badge.innerText = F&G:  ();
+            badge.innerText = `F&G: ${fng.value} (${fng.value_classification})`;
             const val = parseInt(fng.value);
             if (val <= 30) badge.style.color = 'var(--accent-sell)';
             else if (val >= 70) badge.style.color = 'var(--accent-buy)';
