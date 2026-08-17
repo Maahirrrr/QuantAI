@@ -193,6 +193,10 @@ function setupButtons() {
     });
 }
 
+let hftInterval = null;
+let lastBackendFetch = 0;
+let lastBackendData = null;
+
 function toggleAutoTrade() {
     state.autoTradeActive = !state.autoTradeActive;
     const btn = document.getElementById('autoTradeBtn');
@@ -201,20 +205,14 @@ function toggleAutoTrade() {
     
     if(state.autoTradeActive) {
         btn.classList.add('active');
-        textSpan.innerText = 'Auto Trade ON';
+        textSpan.innerText = 'HFT Auto Trade ON';
         timerText.classList.add('active');
-        state.autoTradeCountdown = 30;
-        timerText.innerText = '00:30';
+        timerText.innerText = 'HFT';
         
-        addLog('ACTION', 'Auto Trade enabled. Utilizing Live News + Quant ML repo brain.');
+        addLog('ACTION', 'High-Frequency Trading (HFT) enabled. Executing micro-trades every second. NEVER STOPPING.');
         
-        state.autoTradeCountdownInterval = setInterval(() => {
-            state.autoTradeCountdown--;
-            if(state.autoTradeCountdown <= 0) {
-                state.autoTradeCountdown = 30;
-                executeAutoTradeLogic();
-            }
-            timerText.innerText = `00:${state.autoTradeCountdown.toString().padStart(2, '0')}`;
+        hftInterval = setInterval(() => {
+            executeHFTLogic();
         }, 1000);
         
     } else {
@@ -222,65 +220,71 @@ function toggleAutoTrade() {
         textSpan.innerText = 'Start Auto Trade';
         timerText.classList.remove('active');
         timerText.innerText = '00:30';
-        clearInterval(state.autoTradeCountdownInterval);
+        clearInterval(hftInterval);
         addLog('ACTION', 'Auto Trade disabled.');
     }
 }
 
-   async function executeAutoTradeLogic() {
-    addLog('SIGNAL', `Auto-evaluating live data via Python Quant Backend for ${state.currentAsset.display}...`);
-    
-    try {
-        const response = await fetch(`http://127.0.0.1:8000/api/analyze?symbol=${encodeURIComponent(state.currentAsset.symbol)}`);
-        const data = await response.json();
+async function executeHFTLogic() {
+    // 1. Relentless Profit Taking (Close any position > $0.05 profit immediately)
+    state.positions.forEach(p => {
+        let pnl = 0;
+        if(p.side === 'LONG') pnl = (p.currentPrice - p.entryPrice) * p.size;
+        else pnl = (p.entryPrice - p.currentPrice) * p.size;
         
-        if (data.status === 'success') {
-            state.currentAsset.price = data.current_price;
-            
-            addLog('SIGNAL', `[Backend Stats] RSI: ${data.rsi} | Reason: ${data.reason}`);
-            setConfidence(data.confidence);
-            
-            const activePositions = state.positions.filter(p => p.asset === state.currentAsset.display);
-            
-            // Autonomous Budget Sizing
-            const budgetSelection = document.getElementById('autoTradeBudget').value;
-            let targetBudgetUsd = budgetSelection === 'MAX' ? state.balance : parseFloat(budgetSelection);
-            if (targetBudgetUsd > state.balance) targetBudgetUsd = state.balance;
-            
-            // Size scaled by confidence (e.g. 80% conf = 80% of budget)
-            const tradeSizeUsd = targetBudgetUsd * (data.confidence / 100);
-            
-            if (data.signal === 'LONG') {
-                // Auto-Close Shorts
-                activePositions.forEach(p => {
-                    if (p.side === 'SHORT') closePosition(p.id, 'Auto-closed SHORT due to bullish reversal signal.');
-                });
-                
-                if (tradeSizeUsd > 10) {
-                    addLog('EXEC', `[Auto Trade] Statistical edge detected. Sizing: $${tradeSizeUsd.toFixed(2)} -> Executing BUY.`);
-                    executeTrade('LONG', tradeSizeUsd);
-                }
-                
-            } else if (data.signal === 'SHORT') {
-                // Auto-Close Longs
-                activePositions.forEach(p => {
-                    if (p.side === 'LONG') closePosition(p.id, 'Auto-closed LONG due to bearish reversal signal.');
-                });
-                
-                if (tradeSizeUsd > 10) {
-                    addLog('EXEC', `[Auto Trade] Statistical edge detected. Sizing: $${tradeSizeUsd.toFixed(2)} -> Executing SELL.`);
-                    executeTrade('SHORT', tradeSizeUsd);
-                }
-                
-            } else {
-                addLog('ACTION', `[Auto Trade] Neutral signals. Holding current positions.`);
-            }
-        } else {
-            throw new Error(data.message);
+        if (pnl > 0.05) {
+            closePosition(p.id, `HFT micro-profit locked in.`);
         }
-    } catch (error) {
-        addLog('ERROR', `Auto-Trade paused. Backend unreachable. Please run the python server.`);
-        toggleAutoTrade(); // Automatically disable auto trade if backend dies
+    });
+
+    const now = Date.now();
+    // 2. Poll Backend every 15s to get the macro statistical bias (preventing IP bans)
+    if (now - lastBackendFetch > 15000) {
+        try {
+            const response = await fetch(`http://127.0.0.1:8000/api/analyze?symbol=${encodeURIComponent(state.currentAsset.symbol)}`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success') {
+                    lastBackendData = data;
+                    state.currentAsset.price = data.current_price;
+                }
+            }
+        } catch(e) {
+            // Silently ignore to guarantee the bot NEVER stops
+        }
+        lastBackendFetch = now;
+    }
+
+    // 3. High-Frequency Market Making
+    const activePositions = state.positions.filter(p => p.asset === state.currentAsset.display);
+    
+    // Only open new trades if we have less than 15 active (to prevent burning all cash)
+    if (activePositions.length < 15 && state.balance > 10) {
+        const budgetSelection = document.getElementById('autoTradeBudget').value;
+        let targetBudgetUsd = budgetSelection === 'MAX' ? state.balance : parseFloat(budgetSelection);
+        if (targetBudgetUsd > state.balance) targetBudgetUsd = state.balance;
+        
+        // HFT uses tiny slices of the budget per second
+        let tradeSizeUsd = targetBudgetUsd * 0.10; 
+        if (tradeSizeUsd < 5) tradeSizeUsd = 5; // Minimum trade size
+        if (tradeSizeUsd > state.balance) tradeSizeUsd = state.balance;
+
+        let signal = 'HOLD';
+        
+        // Bias trades based on backend trend, or randomly scalp
+        if (lastBackendData && lastBackendData.signal === 'LONG') {
+            signal = Math.random() > 0.2 ? 'LONG' : 'HOLD'; // 80% chance to buy
+        } else if (lastBackendData && lastBackendData.signal === 'SHORT') {
+            signal = Math.random() > 0.2 ? 'SHORT' : 'HOLD';
+        } else {
+            // Total random noise scalping
+            const r = Math.random();
+            if (r > 0.6) signal = 'LONG';
+            else if (r < 0.4) signal = 'SHORT';
+        }
+        
+        if (signal === 'LONG') executeTrade('LONG', tradeSizeUsd);
+        if (signal === 'SHORT') executeTrade('SHORT', tradeSizeUsd);
     }
 }
 
@@ -487,32 +491,16 @@ function addLog(type, message) {
     `;
     
     logContainer.appendChild(div);
+    
+    // Performance: Keep only the last 100 logs
+    while (logContainer.children.length > 100) {
+        logContainer.removeChild(logContainer.firstChild);
+    }
+    
     logContainer.scrollTop = logContainer.scrollHeight;
     
     div.style.backgroundColor = 'rgba(124, 58, 237, 0.15)';
     setTimeout(() => div.style.backgroundColor = 'transparent', 300);
-}
-
-function executeTrade(side) {
-    const price = state.currentAsset.price;
-    // Trade 10% of total balance
-    const sizeUsd = state.balance * 0.1; 
-    const sizeAsset = sizeUsd / price;
-    
-    state.positions.push({
-        id: Math.random().toString(36).substr(2, 9),
-        asset: state.currentAsset.display,
-        side: side,
-        entryPrice: price,
-        size: sizeAsset,
-        currentPrice: price
-    });
-    
-    state.balance -= sizeUsd;
-    saveState();
-    updateWalletDisplay();
-    renderPositions();
-    addLog('EXEC', `Filled ${side} ${state.currentAsset.display} @ $${price.toLocaleString()}`);
 }
 
 function updateWalletDisplay() {
@@ -532,7 +520,7 @@ function renderPositions() {
     const tbody = document.getElementById('positionsBody');
     tbody.innerHTML = '';
     
-    state.positions.forEach(p => {
+    state.positions.slice(-8).forEach(p => {
         let pnl = 0;
         if(p.side === 'LONG') {
             pnl = (p.currentPrice - p.entryPrice) * p.size;
