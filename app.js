@@ -245,10 +245,11 @@ const ENTRY_FEE = 0.0002; // 0.02% VIP Maker fee (Limit Order simulation)
 const EXIT_FEE = 0.0004;  // 0.04% VIP Taker fee (Market Order execution)
 
 async function executeHFTLogic() {
-    const activePositions = state.positions.filter(p => p.asset === state.currentAsset.display);
-    
-    // 1. Dynamic Risk Management (Trailing Stops & Take-Profit)
+    // 1. Realistic Risk Management (Strict Stop-Loss & Take-Profit with Fees)
     state.positions.forEach(p => {
+        const liveAsset = assets.find(a => a.display === p.asset);
+        if (liveAsset) p.currentPrice = liveAsset.price;
+        
         // Initialize extremums if missing
         if (!p.highestPrice) p.highestPrice = p.entryPrice;
         if (!p.lowestPrice) p.lowestPrice = p.entryPrice;
@@ -279,89 +280,85 @@ async function executeHFTLogic() {
         
         // Advanced HFT Exit Strategy
         if (netPnlPct < -0.0025) {
-            // Hard Stop-Loss: -0.25%
             closePosition(p.id, `Hard stop hit (${(netPnlPct*100).toFixed(2)}% net).`);
         } else if (netPnlPct > 0.0075) {
-            // Hard Take-Profit: +0.75% (Sudden volatility spike)
             closePosition(p.id, `Spike Take-Profit hit (+${(netPnlPct*100).toFixed(2)}% net).`);
         } else if (peakPnlPct > 0.0020 && (peakPnlPct - netPnlPct) > 0.0010) {
-            // Trailing Stop: If we reached at least +0.2% profit, but pulled back by 0.1%, take the money!
             closePosition(p.id, `Trailing stop locked profit (+${(netPnlPct*100).toFixed(2)}% net).`);
         }
     });
 
     const now = Date.now();
-    // 2. Poll Backend for Macro Sentiment
-    if (now - lastBackendFetch > 15000) {
+    // 2. Poll Backend for Macro Sentiment (Rotate random asset)
+    if (now - lastBackendFetch > 5000) {
         try {
-            const response = await fetch(`http://127.0.0.1:8000/api/analyze?symbol=${encodeURIComponent(state.currentAsset.symbol)}`);
+            const target = assets[Math.floor(Math.random() * assets.length)];
+            const response = await fetch(`http://127.0.0.1:8000/api/analyze?symbol=${encodeURIComponent(target.symbol)}`);
             if (response.ok) {
                 const data = await response.json();
                 if (data.status === 'success') {
-                    lastBackendData = data;
-                    state.currentAsset.price = data.current_price;
+                    if (!window.backendDataMap) window.backendDataMap = {};
+                    window.backendDataMap[target.display] = data;
+                    target.price = data.current_price;
                 }
             }
         } catch(e) {}
         lastBackendFetch = now;
     }
 
-    // 3. Statistical Arbitrage Entry Logic (Bollinger Bands / Z-Score)
-    if (activePositions.length === 0 && state.balance > 10) {
-        // Latency Filter (Simulated order rejection on high ping)
-        const currentLatencyMs = 20 + Math.random() * 150;
-        if (currentLatencyMs > 120) {
-            // Silently reject the order internally to avoid spamming the log every second
-            return;
-        }
+    // 3. Algorithmic Entry Logic (Multi-Asset Portfolio Evaluation)
+    assets.forEach(asset => {
+        const activePositions = state.positions.filter(p => p.asset === asset.display);
+        if (activePositions.length === 0 && state.balance > 10) {
+            const currentLatencyMs = 20 + Math.random() * 150;
+            if (currentLatencyMs > 120) return;
 
-        const budgetSelection = document.getElementById('autoTradeBudget').value;
-        let targetBudgetUsd = 1000;
-        
-        if (budgetSelection === 'RISK_0.5') {
-            // Strict SEBI/Quant constraint: Position size limited to risk roughly 0.5% of total equity
-            targetBudgetUsd = state.balance * 0.05; // Using 5% equity per trade ensures total risk < 0.5%
-        } else if (budgetSelection === 'MAX') {
-            targetBudgetUsd = state.balance;
-        } else {
-            targetBudgetUsd = parseFloat(budgetSelection);
-        }
-        
-        if (targetBudgetUsd > state.balance) targetBudgetUsd = state.balance;
-
-        let signal = 'HOLD';
-        let reason = '';
-        
-        // 40% chance to follow macro trend if backend signals edge
-        if (lastBackendData && lastBackendData.signal !== 'HOLD' && Math.random() > 0.6) {
-            signal = lastBackendData.signal;
-            reason = `Macro trend alignment (Conf: ${lastBackendData.confidence}%) | Latency: ${currentLatencyMs.toFixed(0)}ms`;
-        } else if (priceHistory.length >= 20) {
-            // Internal Statistical Arbitrage Engine (Bollinger Z-Score)
-            const period = 20;
-            const slice = priceHistory.slice(-period);
-            const sma = slice.reduce((a,b) => a+b, 0) / period;
-            const variance = slice.reduce((a,b) => a + Math.pow(b - sma, 2), 0) / period;
-            const sd = Math.sqrt(variance);
+            const budgetSelection = document.getElementById('autoTradeBudget').value;
+            let targetBudgetUsd = 1000;
             
-            const currentPrice = state.currentAsset.price;
-            const zScore = sd > 0 ? (currentPrice - sma) / sd : 0;
+            if (budgetSelection === 'RISK_0.5') {
+                targetBudgetUsd = state.balance * 0.05; 
+            } else if (budgetSelection === 'MAX') {
+                targetBudgetUsd = state.balance;
+            } else {
+                targetBudgetUsd = parseFloat(budgetSelection);
+            }
+            if (targetBudgetUsd > state.balance) targetBudgetUsd = state.balance;
 
-            // Stat-Arb Mean Reversion
-            if (zScore < -1.8) {
-                signal = 'LONG';
-                reason = `Stat-Arb: Z-Score ${zScore.toFixed(2)} | Latency: ${currentLatencyMs.toFixed(0)}ms`;
-            } else if (zScore > 1.8) {
-                signal = 'SHORT';
-                reason = `Stat-Arb: Z-Score ${zScore.toFixed(2)} | Latency: ${currentLatencyMs.toFixed(0)}ms`;
+            let signal = 'HOLD';
+            let reason = '';
+            
+            const bData = window.backendDataMap ? window.backendDataMap[asset.display] : null;
+            
+            if (bData && bData.signal !== 'HOLD' && Math.random() > 0.6) {
+                signal = bData.signal;
+                reason = `Macro trend alignment (Conf: ${bData.confidence}%) | Latency: ${currentLatencyMs.toFixed(0)}ms`;
+            } else if (window.priceHistories && window.priceHistories[asset.display] && window.priceHistories[asset.display].length >= 20) {
+                const history = window.priceHistories[asset.display];
+                const period = 20;
+                const slice = history.slice(-period);
+                const sma = slice.reduce((a,b)=>a+b, 0) / period;
+                const variance = slice.reduce((a,b) => a + Math.pow(b - sma, 2), 0) / period;
+                const sd = Math.sqrt(variance);
+                
+                const currentPrice = asset.price;
+                const zScore = sd > 0 ? (currentPrice - sma) / sd : 0;
+
+                if (zScore < -1.8) {
+                    signal = 'LONG';
+                    reason = `Stat-Arb ${asset.display}: Z-Score ${zScore.toFixed(2)} | Latency: ${currentLatencyMs.toFixed(0)}ms`;
+                } else if (zScore > 1.8) {
+                    signal = 'SHORT';
+                    reason = `Stat-Arb ${asset.display}: Z-Score ${zScore.toFixed(2)} | Latency: ${currentLatencyMs.toFixed(0)}ms`;
+                }
+            }
+            
+            if (signal !== 'HOLD' && targetBudgetUsd <= state.balance) {
+                executeTrade(signal, targetBudgetUsd, asset);
+                addLog('SIGNAL', `[Systematic Algo] ${reason}`);
             }
         }
-        
-        if (signal !== 'HOLD') {
-            executeTrade(signal, targetBudgetUsd);
-            addLog('SIGNAL', `[Systematic Algo] ${reason}`);
-        }
-    }
+    });
 }
 
 function closePosition(id, reason) {
@@ -412,8 +409,8 @@ function addRipple(e, button) {
     setTimeout(() => ripple.remove(), 300);
 }
 
-function executeTrade(side, forceSizeUsd = null) {
-    const price = state.currentAsset.price;
+function executeTrade(side, forceSizeUsd = null, targetAsset = state.currentAsset) {
+    const price = targetAsset.price;
     let sizeUsd = forceSizeUsd;
     
     if (!sizeUsd) sizeUsd = state.balance * 0.1;
@@ -426,7 +423,7 @@ function executeTrade(side, forceSizeUsd = null) {
     
     state.positions.push({
         id: Math.random().toString(36).substr(2, 9),
-        asset: state.currentAsset.display,
+        asset: targetAsset.display,
         side: side,
         entryPrice: price,
         size: sizeAsset,
@@ -439,7 +436,7 @@ function executeTrade(side, forceSizeUsd = null) {
     saveState();
     updateWalletDisplay();
     renderPositions();
-    addLog('EXEC', `Filled ${side} ${state.currentAsset.display} @ $${price.toLocaleString()} (Size: $${netInvestment.toFixed(2)}, Maker Fee: $${fee.toFixed(2)})`);
+    addLog('EXEC', `Filled ${side} ${targetAsset.display} @ $${price.toLocaleString()} (Size: $${netInvestment.toFixed(2)}, Maker Fee: $${fee.toFixed(2)})`);
 }
 
 function toggleAssetModal(show) {
@@ -677,6 +674,10 @@ function calculateTotalEquity() {
 }
 
 function startMarketSimulation() {
+    if (!window.priceHistories) window.priceHistories = {};
+    if (!window.backendDataMap) window.backendDataMap = {};
+    assets.forEach(a => window.priceHistories[a.display] = [a.price]);
+
     setInterval(() => {
         const now = Date.now();
         if(now - state.lastUpdateMs > 5000) {
@@ -685,13 +686,17 @@ function startMarketSimulation() {
             document.getElementById('connDot').className = 'dot live';
         }
 
-        // Random walk for mock pricing
         const vol = 0.0005; // 0.05% vol per tick
-        state.currentAsset.price *= (1 + (Math.random() - 0.5) * vol);
+        assets.forEach(a => {
+            a.price *= (1 + (Math.random() - 0.5) * vol);
+            window.priceHistories[a.display].push(a.price);
+            if (window.priceHistories[a.display].length > 60) window.priceHistories[a.display].shift();
+            
+            if (a.display === state.currentAsset.display) {
+                state.currentAsset.price = a.price;
+            }
+        });
         state.lastUpdateMs = now;
-        
-        priceHistory.push(state.currentAsset.price);
-        if (priceHistory.length > 60) priceHistory.shift();
         
         let pnlChanged = false;
         let todaysPnl = 0;
