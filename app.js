@@ -261,18 +261,20 @@ function setupButtons() {
     });
 
     document.getElementById('resetWalletBtn').addEventListener('click', () => {
-        setupChart();
-        setupButtons();
-        startMarketSimulation();
+        state.balance = 10000;
+        state.positions = [];
+        state.metrics = { wins: 0, losses: 0, totalWinUsd: 0, totalLossUsd: 0 };
+        saveState();
         updateWalletDisplay();
         renderPositions();
-        updateMetricsDisplay();
-        fetchFearAndGreed();
-        initEquityChart();
-        
-        setTimeout(() => {
-            addLog('SYSTEM', 'Terminal ready. Market simulation connected.');
-        }, 1000);
+        if(typeof equityHistory !== 'undefined') {
+            equityHistory.length = 0;
+            equityLabels.length = 0;
+            equityHistory.push(10000);
+            equityLabels.push(new Date().toLocaleTimeString());
+            if(equityChartInstance) equityChartInstance.update();
+        }
+        addLog('ACTION', 'Paper wallet reset to initial state ($10,000)');
     });
 
     document.getElementById('closeAllBtn').addEventListener('click', () => {
@@ -389,7 +391,7 @@ async function executeHFTLogic() {
             const btcRet = (btcHist[btcHist.length-1] - btcBase) / btcBase;
             const ethRet = (ethHist[ethHist.length-1] - ethBase) / ethBase;
             const spread = btcRet - ethRet;
-            if (Math.abs(spread) > 0.005) {
+            if (Math.abs(spread) > 0.0015) {
                 let hedgeSize = state.balance * 0.02;
                 if (spread > 0) {
                     addLog('SYSTEM', `[Pairs Hedging] BTC/ETH Divergence (${(spread*100).toFixed(2)}%). Short BTC, Long ETH.`);
@@ -438,7 +440,7 @@ async function executeHFTLogic() {
             
             // Priority 1: Backend Signals
             const bData = window.backendDataMap ? window.backendDataMap[asset.display] : null;
-            if (bData && bData.signal !== 'HOLD' && bData.confidence > 60) {
+            if (bData && bData.signal !== 'HOLD' && bData.confidence >= 55) {
                 signal = bData.signal;
                 // dynamically scale position size based on confidence (e.g. 60-100 scales to 0.5x - 1.5x)
                 const confScale = (bData.confidence - 60) / 40; 
@@ -456,10 +458,10 @@ async function executeHFTLogic() {
                 const sd = Math.sqrt(variance);
                 const zScore = sd > 0 ? (asset.price - sma) / sd : 0;
 
-                if (zScore < -2.0) {
+                if (zScore < -1.2) {
                     signal = 'LONG';
                     reason = `Stat-Arb ${asset.display}: Z-Score ${zScore.toFixed(2)} (Oversold)`;
-                } else if (zScore > 2.0) {
+                } else if (zScore > 1.2) {
                     signal = 'SHORT';
                     reason = `Stat-Arb ${asset.display}: Z-Score ${zScore.toFixed(2)} (Overbought)`;
                 }
