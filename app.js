@@ -227,22 +227,35 @@ function toggleAutoTrade() {
     }
 }
 
-function executeAutoTradeLogic() {
-    addLog('SIGNAL', `Auto-evaluating live news feeds & Github quant models for ${state.currentAsset.display}...`);
+async function executeAutoTradeLogic() {
+    addLog('SIGNAL', `Auto-evaluating live data via Python Quant Backend for ${state.currentAsset.display}...`);
     
-    setTimeout(() => {
-        const rand = Math.random();
-        // 40% BUY, 40% SELL, 20% HOLD
-        if (rand < 0.4) {
-            addLog('EXEC', `[Auto Trade] Positive sentiment & LSTM alpha detected -> Executing BUY.`);
-            executeTrade('LONG');
-        } else if (rand < 0.8) {
-            addLog('EXEC', `[Auto Trade] Macro headwinds & VaR breach detected -> Executing SELL.`);
-            executeTrade('SHORT');
+    try {
+        const response = await fetch(`http://127.0.0.1:8000/api/analyze?symbol=${encodeURIComponent(state.currentAsset.symbol)}`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            state.currentAsset.price = data.current_price;
+            
+            addLog('SIGNAL', `[Backend Stats] RSI: ${data.rsi} | Reason: ${data.reason}`);
+            setConfidence(data.confidence);
+            
+            if (data.signal === 'LONG') {
+                addLog('EXEC', `[Auto Trade] Statistical edge detected -> Executing BUY.`);
+                executeTrade('LONG');
+            } else if (data.signal === 'SHORT') {
+                addLog('EXEC', `[Auto Trade] Statistical edge detected -> Executing SELL.`);
+                executeTrade('SHORT');
+            } else {
+                addLog('ACTION', `[Auto Trade] Neutral signals. Holding current positions.`);
+            }
         } else {
-            addLog('ACTION', `[Auto Trade] Neutral signals. Holding current positions.`);
+            throw new Error(data.message);
         }
-    }, 1500);
+    } catch (error) {
+        addLog('ERROR', `Auto-Trade paused. Backend unreachable. Please run the python server.`);
+        toggleAutoTrade(); // Automatically disable auto trade if backend dies
+    }
 }
 
 function addRipple(e, button) {
@@ -314,7 +327,7 @@ function selectAsset(asset) {
     }, 500);
 }
 
-function runAIAnalysis() {
+async function runAIAnalysis() {
     if (state.isAnalysisRunning) return;
     state.isAnalysisRunning = true;
     
@@ -323,43 +336,39 @@ function runAIAnalysis() {
     btn.innerHTML = `<span class="spinner" style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> Analyzing...`;
     
     setConfidence(0);
-    let step = 0;
-    
-    const steps = [
-        "[cantaro86] Calculating Black-Scholes Delta & local stochastic volatility...",
-        "[stefan-jansen] Ingesting L2 book via MCP for gradient boosting prediction...",
-        "[LechGrzelak] Computing short-term VaR and Monte Carlo price paths...",
-        "[wilsonfreitas] Applying Kelly Criterion for optimal position sizing..."
-    ];
+    addLog('SIGNAL', 'Contacting local Python Quant Backend...');
 
-    const int = setInterval(() => {
-        if(step < steps.length) {
-            addLog('SIGNAL', steps[step]);
-            setConfidence(25 + (step * 20));
-            step++;
-        } else {
-            clearInterval(int);
-            const isBuy = Math.random() > 0.4; 
-            const conf = 82 + Math.floor(Math.random() * 15);
-            setConfidence(conf);
+    try {
+        const response = await fetch(`http://127.0.0.1:8000/api/analyze?symbol=${encodeURIComponent(state.currentAsset.symbol)}`);
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            state.currentAsset.price = data.current_price;
             
-            const signalText = `${isBuy ? 'LONG' : 'SHORT'} ALPHA DETECTED for ${state.currentAsset.display} with ${conf}% confidence.`;
+            addLog('SIGNAL', `[Backend Data] Price: $${data.current_price} | RSI: ${data.rsi} | Reason: ${data.reason}`);
+            setConfidence(data.confidence);
+            
+            const signalText = `${data.signal} SIGNAL DETECTED for ${state.currentAsset.display} with ${data.confidence}% confidence.`;
             addLog('EXEC', signalText);
             
             document.getElementById('bottomSignalFeed').innerHTML = `
-                <div class="feed-content" style="color: ${isBuy ? 'var(--accent-buy)' : 'var(--accent-sell)'}">
+                <div class="feed-content" style="color: ${data.signal === 'HOLD' ? 'var(--text-secondary)' : (data.signal === 'LONG' ? 'var(--accent-buy)' : 'var(--accent-sell)')}">
                     <span class="feed-icon">🎯</span>
-                    <span class="feed-text">${signalText}</span>
+                    <span class="feed-text">Backend Prediction: ${signalText}</span>
                 </div>
             `;
             
             state.signalsToday++;
             document.getElementById('signalsToday').innerText = state.signalsToday;
-            
-            btn.innerHTML = originalContent;
-            state.isAnalysisRunning = false;
+        } else {
+            throw new Error(data.message);
         }
-    }, 800);
+    } catch (error) {
+        addLog('ERROR', `Backend unreachable: ${error.message}. Start the Python server on port 8000.`);
+    } finally {
+        btn.innerHTML = originalContent;
+        state.isAnalysisRunning = false;
+    }
 }
 
 function setConfidence(val) {
