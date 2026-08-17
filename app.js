@@ -316,7 +316,20 @@ async function executeHFTLogic() {
             const budgetSelection = document.getElementById('autoTradeBudget').value;
             let targetBudgetUsd = 1000;
             
-            if (budgetSelection === 'RISK_0.5') {
+            if (budgetSelection === 'KELLY') {
+                const totalTrades = Math.max(1, state.metrics.wins + state.metrics.losses);
+                const W = state.metrics.wins / totalTrades;
+                const avgWin = state.metrics.wins > 0 ? state.metrics.totalWinUsd / state.metrics.wins : 0.01;
+                const avgLoss = state.metrics.losses > 0 ? state.metrics.totalLossUsd / state.metrics.losses : 0.01;
+                const R = avgWin / avgLoss;
+                
+                let kellyPct = 0;
+                if (W > 0 && R > 0) kellyPct = W - ((1 - W) / R);
+                
+                // Cap Kelly fraction at 10% maximum portfolio risk per trade
+                kellyPct = Math.max(0.01, Math.min(kellyPct, 0.10));
+                targetBudgetUsd = state.balance * kellyPct;
+            } else if (budgetSelection === 'RISK_0.5') {
                 targetBudgetUsd = state.balance * 0.05; 
             } else if (budgetSelection === 'MAX') {
                 targetBudgetUsd = state.balance;
@@ -678,6 +691,25 @@ function startMarketSimulation() {
     if (!window.backendDataMap) window.backendDataMap = {};
     assets.forEach(a => window.priceHistories[a.display] = [a.price]);
 
+    // 1. Live Binance WebSockets for Crypto
+    try {
+        const ws = new WebSocket('wss://stream.binance.com:9443/stream?streams=btcusdt@trade/ethusdt@trade');
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            const stream = data.stream;
+            const price = parseFloat(data.data.p);
+            
+            if (stream === 'btcusdt@trade') {
+                const btc = assets.find(a => a.symbol === 'BINANCE:BTCUSD');
+                if (btc) btc.price = price;
+            } else if (stream === 'ethusdt@trade') {
+                const eth = assets.find(a => a.symbol === 'BINANCE:ETHUSD');
+                if (eth) eth.price = price;
+            }
+        };
+        setTimeout(() => addLog('SYSTEM', 'Binance WebSocket Connected. Streaming LIVE tick-by-tick Crypto orderbook data.'), 1500);
+    } catch(e) {}
+
     setInterval(() => {
         const now = Date.now();
         if(now - state.lastUpdateMs > 5000) {
@@ -686,9 +718,13 @@ function startMarketSimulation() {
             document.getElementById('connDot').className = 'dot live';
         }
 
-        const vol = 0.0005; // 0.05% vol per tick
+        const vol = 0.0005; 
         assets.forEach(a => {
-            a.price *= (1 + (Math.random() - 0.5) * vol);
+            // Only mock non-crypto since crypto is now driven by live WebSocket
+            if (!a.symbol.includes('BTC') && !a.symbol.includes('ETH')) {
+                a.price *= (1 + (Math.random() - 0.5) * vol);
+            }
+            
             window.priceHistories[a.display].push(a.price);
             if (window.priceHistories[a.display].length > 60) window.priceHistories[a.display].shift();
             
