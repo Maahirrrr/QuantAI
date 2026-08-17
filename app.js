@@ -24,6 +24,80 @@ const state = {
     autoTradeActive: false,
 };
 
+
+let equityChartInstance = null;
+const equityHistory = [10000.00];
+const equityLabels = [new Date().toLocaleTimeString()];
+
+function initEquityChart() {
+    const ctx = document.getElementById('equityChart');
+    if (!ctx) return;
+    equityChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: equityLabels,
+            datasets: [{
+                label: 'Equity ($)',
+                data: equityHistory,
+                borderColor: '#7C3AED',
+                backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: true,
+                tension: 0.2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: false },
+                y: { 
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#8b949e', callback: (v) => '$'+v }
+                }
+            }
+        }
+    });
+}
+
+function renderOrderBook(depthData) {
+    const asksDiv = document.getElementById('ob-asks');
+    const bidsDiv = document.getElementById('ob-bids');
+    const spreadDiv = document.getElementById('ob-spread');
+    if(!asksDiv || !bidsDiv) return;
+    
+    let htmlAsks = '';
+    let maxAskVol = 0;
+    depthData.asks.forEach(a => { maxAskVol = Math.max(maxAskVol, parseFloat(a[1])); });
+    
+    depthData.asks.slice(0, 8).reverse().forEach(ask => {
+        const price = parseFloat(ask[0]).toFixed(2);
+        const amt = parseFloat(ask[1]).toFixed(3);
+        const width = (parseFloat(ask[1]) / maxAskVol) * 100;
+        htmlAsks += `<div class="ob-row pnl-negative"><div class="ob-bg" style="width: ${width}%"></div><div class="ob-text"><span>${price}</span><span>${amt}</span></div></div>`;
+    });
+    
+    let htmlBids = '';
+    let maxBidVol = 0;
+    depthData.bids.forEach(b => { maxBidVol = Math.max(maxBidVol, parseFloat(b[1])); });
+    
+    depthData.bids.slice(0, 8).forEach(bid => {
+        const price = parseFloat(bid[0]).toFixed(2);
+        const amt = parseFloat(bid[1]).toFixed(3);
+        const width = (parseFloat(bid[1]) / maxBidVol) * 100;
+        htmlBids += `<div class="ob-row pnl-positive"><div class="ob-bg" style="width: ${width}%"></div><div class="ob-text"><span>${price}</span><span>${amt}</span></div></div>`;
+    });
+    
+    asksDiv.innerHTML = htmlAsks;
+    bidsDiv.innerHTML = htmlBids;
+    
+    const bestAsk = parseFloat(depthData.asks[0][0]);
+    const bestBid = parseFloat(depthData.bids[0][0]);
+    spreadDiv.innerText = `Spread: $${(bestAsk - bestBid).toFixed(2)}`;
+}
+
 const priceHistory = [];
 
 // Universe
@@ -82,6 +156,7 @@ function initChart() {
 }
 
 function initUI() {
+    initEquityChart();
     // Navigation Buttons Logic
     const navBtns = document.querySelectorAll('.nav-btn');
     navBtns.forEach(btn => {
@@ -186,12 +261,18 @@ function setupButtons() {
     });
 
     document.getElementById('resetWalletBtn').addEventListener('click', () => {
-        state.balance = 10000;
-        state.positions = [];
-        saveState();
+        setupChart();
+        setupButtons();
+        startMarketSimulation();
         updateWalletDisplay();
         renderPositions();
-        addLog('ACTION', 'Paper wallet reset to initial state ($10,000)');
+        updateMetricsDisplay();
+        fetchFearAndGreed();
+        initEquityChart();
+        
+        setTimeout(() => {
+            addLog('SYSTEM', 'Terminal ready. Market simulation connected.');
+        }, 1000);
     });
 
     document.getElementById('closeAllBtn').addEventListener('click', () => {
@@ -245,28 +326,19 @@ const ENTRY_FEE = 0.0002; // 0.02% VIP Maker fee (Limit Order simulation)
 const EXIT_FEE = 0.0004;  // 0.04% VIP Taker fee (Market Order execution)
 
 async function executeHFTLogic() {
-    // 1. Realistic Risk Management (Strict Stop-Loss & Take-Profit with Fees)
+    // 1. Risk Management
     state.positions.forEach(p => {
         const liveAsset = assets.find(a => a.display === p.asset);
         if (liveAsset) p.currentPrice = liveAsset.price;
         
-        // Initialize extremums if missing
         if (!p.highestPrice) p.highestPrice = p.entryPrice;
         if (!p.lowestPrice) p.lowestPrice = p.entryPrice;
         
-        // Track peak/valley for trailing stops
         if (p.currentPrice > p.highestPrice) p.highestPrice = p.currentPrice;
         if (p.currentPrice < p.lowestPrice) p.lowestPrice = p.currentPrice;
         
-        let grossPnl = 0;
-        let peakPnl = 0;
-        if(p.side === 'LONG') {
-            grossPnl = (p.currentPrice - p.entryPrice) * p.size;
-            peakPnl = (p.highestPrice - p.entryPrice) * p.size;
-        } else {
-            grossPnl = (p.entryPrice - p.currentPrice) * p.size;
-            peakPnl = (p.entryPrice - p.lowestPrice) * p.size;
-        }
+        let grossPnl = p.side === 'LONG' ? (p.currentPrice - p.entryPrice) * p.size : (p.entryPrice - p.currentPrice) * p.size;
+        let peakPnl = p.side === 'LONG' ? (p.highestPrice - p.entryPrice) * p.size : (p.entryPrice - p.lowestPrice) * p.size;
         
         const positionValue = p.size * p.currentPrice;
         const entryFee = (p.size * p.entryPrice) * ENTRY_FEE; 
@@ -274,24 +346,24 @@ async function executeHFTLogic() {
         
         const netPnl = grossPnl - entryFee - exitFee;
         const netPnlPct = netPnl / (p.size * p.entryPrice);
-
         const peakNetPnl = peakPnl - entryFee - exitFee;
         const peakPnlPct = peakNetPnl / (p.size * p.entryPrice);
         
-        // Advanced HFT Exit Strategy
-        if (netPnlPct < -0.0025) {
+        // HFT Exit Strategy
+        if (netPnlPct < -0.01) {
             closePosition(p.id, `Hard stop hit (${(netPnlPct*100).toFixed(2)}% net).`);
-        } else if (netPnlPct > 0.0075) {
-            closePosition(p.id, `Spike Take-Profit hit (+${(netPnlPct*100).toFixed(2)}% net).`);
-        } else if (peakPnlPct > 0.0020 && (peakPnlPct - netPnlPct) > 0.0010) {
+        } else if (netPnlPct > 0.015) {
+            closePosition(p.id, `Take-Profit hit (+${(netPnlPct*100).toFixed(2)}% net).`);
+        } else if (peakPnlPct > 0.005 && (peakPnlPct - netPnlPct) > 0.003) {
             closePosition(p.id, `Trailing stop locked profit (+${(netPnlPct*100).toFixed(2)}% net).`);
         }
     });
 
     const now = Date.now();
-    // 2. Poll Backend for Macro Sentiment (Rotate random asset)
-    if (now - lastBackendFetch > 5000) {
+    // 2. Poll Backend for Macro Sentiment
+    if (now - lastBackendFetch > 3000) {
         try {
+            // Pick an asset to analyze
             const target = assets[Math.floor(Math.random() * assets.length)];
             const response = await fetch(`http://127.0.0.1:8000/api/analyze?symbol=${encodeURIComponent(target.symbol)}`);
             if (response.ok) {
@@ -306,69 +378,88 @@ async function executeHFTLogic() {
         lastBackendFetch = now;
     }
 
-    // 3. Algorithmic Entry Logic (Multi-Asset Portfolio Evaluation)
+    // 3. Algorithmic Entry Logic
+    
+    if (activePositions.length === 0 && state.balance > 100 && window.priceHistories['BTC/USD'] && window.priceHistories['ETH/USD']) {
+        const btcHist = window.priceHistories['BTC/USD'];
+        const ethHist = window.priceHistories['ETH/USD'];
+        if (btcHist.length >= 20 && ethHist.length >= 20) {
+            const btcBase = btcHist[btcHist.length-20];
+            const ethBase = ethHist[ethHist.length-20];
+            const btcRet = (btcHist[btcHist.length-1] - btcBase) / btcBase;
+            const ethRet = (ethHist[ethHist.length-1] - ethBase) / ethBase;
+            const spread = btcRet - ethRet;
+            if (Math.abs(spread) > 0.005) {
+                let hedgeSize = state.balance * 0.02;
+                if (spread > 0) {
+                    addLog('SYSTEM', `[Pairs Hedging] BTC/ETH Divergence (${(spread*100).toFixed(2)}%). Short BTC, Long ETH.`);
+                    executeTrade('SHORT', hedgeSize, assets.find(a=>a.symbol==='BINANCE:BTCUSD'));
+                    executeTrade('LONG', hedgeSize, assets.find(a=>a.symbol==='BINANCE:ETHUSD'));
+                } else {
+                    addLog('SYSTEM', `[Pairs Hedging] BTC/ETH Divergence (${(spread*100).toFixed(2)}%). Long BTC, Short ETH.`);
+                    executeTrade('LONG', hedgeSize, assets.find(a=>a.symbol==='BINANCE:BTCUSD'));
+                    executeTrade('SHORT', hedgeSize, assets.find(a=>a.symbol==='BINANCE:ETHUSD'));
+                }
+            }
+        }
+    }
+
     assets.forEach(asset => {
         const activePositions = state.positions.filter(p => p.asset === asset.display);
+        // Only trade if we don't hold this asset, and have enough balance
         if (activePositions.length === 0 && state.balance > 10) {
-            const currentLatencyMs = 20 + Math.random() * 150;
-            if (currentLatencyMs > 120) return;
-
+            
+            // Dynamic Position Sizing based on Kelly / UI Selection
             const budgetSelection = document.getElementById('autoTradeBudget').value;
             let targetBudgetUsd = 1000;
-            
-            if (budgetSelection === 'KELLY') {
-                const totalTrades = Math.max(1, state.metrics.wins + state.metrics.losses);
-                const W = state.metrics.wins / totalTrades;
-                const avgWin = state.metrics.wins > 0 ? state.metrics.totalWinUsd / state.metrics.wins : 0.01;
-                const avgLoss = state.metrics.losses > 0 ? state.metrics.totalLossUsd / state.metrics.losses : 0.01;
-                const R = avgWin / avgLoss;
-                
-                let kellyPct = 0;
-                if (W > 0 && R > 0) kellyPct = W - ((1 - W) / R);
-                
-                // Cap Kelly fraction at 10% maximum portfolio risk per trade
-                kellyPct = Math.max(0.01, Math.min(kellyPct, 0.10));
-                targetBudgetUsd = state.balance * kellyPct;
-            } else if (budgetSelection === 'RISK_0.5') {
-                targetBudgetUsd = state.balance * 0.05; 
+            if (budgetSelection === 'RISK_0.5') {
+                targetBudgetUsd = state.balance * 0.05; // Using 5% for better demonstration
             } else if (budgetSelection === 'MAX') {
                 targetBudgetUsd = state.balance;
             } else {
                 targetBudgetUsd = parseFloat(budgetSelection);
             }
+
             if (targetBudgetUsd > state.balance) targetBudgetUsd = state.balance;
+            if (targetBudgetUsd < 10) return; // Too small to trade
 
             let signal = 'HOLD';
             let reason = '';
             
+            // Priority 1: Backend Signals
             const bData = window.backendDataMap ? window.backendDataMap[asset.display] : null;
-            
-            if (bData && bData.signal !== 'HOLD' && Math.random() > 0.6) {
+            if (bData && bData.signal !== 'HOLD' && bData.confidence > 60) {
                 signal = bData.signal;
-                reason = `Macro trend alignment (Conf: ${bData.confidence}%) | Latency: ${currentLatencyMs.toFixed(0)}ms`;
-            } else if (window.priceHistories && window.priceHistories[asset.display] && window.priceHistories[asset.display].length >= 20) {
+                // dynamically scale position size based on confidence (e.g. 60-100 scales to 0.5x - 1.5x)
+                const confScale = (bData.confidence - 60) / 40; 
+                targetBudgetUsd = targetBudgetUsd * (0.5 + confScale); 
+                if (targetBudgetUsd > state.balance) targetBudgetUsd = state.balance;
+                reason = `Macro trend alignment (Conf: ${bData.confidence}%)`;
+            } 
+            // Priority 2: Statistical Arbitrage / Mean Reversion
+            else if (window.priceHistories && window.priceHistories[asset.display] && window.priceHistories[asset.display].length >= 20) {
                 const history = window.priceHistories[asset.display];
                 const period = 20;
                 const slice = history.slice(-period);
                 const sma = slice.reduce((a,b)=>a+b, 0) / period;
                 const variance = slice.reduce((a,b) => a + Math.pow(b - sma, 2), 0) / period;
                 const sd = Math.sqrt(variance);
-                
-                const currentPrice = asset.price;
-                const zScore = sd > 0 ? (currentPrice - sma) / sd : 0;
+                const zScore = sd > 0 ? (asset.price - sma) / sd : 0;
 
-                if (zScore < -1.8) {
+                if (zScore < -2.0) {
                     signal = 'LONG';
-                    reason = `Stat-Arb ${asset.display}: Z-Score ${zScore.toFixed(2)} | Latency: ${currentLatencyMs.toFixed(0)}ms`;
-                } else if (zScore > 1.8) {
+                    reason = `Stat-Arb ${asset.display}: Z-Score ${zScore.toFixed(2)} (Oversold)`;
+                } else if (zScore > 2.0) {
                     signal = 'SHORT';
-                    reason = `Stat-Arb ${asset.display}: Z-Score ${zScore.toFixed(2)} | Latency: ${currentLatencyMs.toFixed(0)}ms`;
+                    reason = `Stat-Arb ${asset.display}: Z-Score ${zScore.toFixed(2)} (Overbought)`;
                 }
             }
             
-            if (signal !== 'HOLD' && targetBudgetUsd <= state.balance) {
+            if (signal !== 'HOLD') {
                 executeTrade(signal, targetBudgetUsd, asset);
-                addLog('SIGNAL', `[Systematic Algo] ${reason}`);
+                addLog('SIGNAL', `[Systematic Algo] ${reason}. Executed ${signal} with $${targetBudgetUsd.toFixed(2)}`);
+                // Clear backend data so we don't repeatedly trade the same signal
+                if (window.backendDataMap) window.backendDataMap[asset.display] = null;
             }
         }
     });
@@ -399,6 +490,14 @@ function closePosition(id, reason) {
         // Return margin + net pnl
         state.balance += (p.size * p.entryPrice) + grossPnl - exitFee; 
         state.positions.splice(idx, 1);
+
+        if (typeof equityChartInstance !== 'undefined' && equityChartInstance) {
+            equityLabels.push(new Date().toLocaleTimeString());
+            equityHistory.push(state.balance);
+            if(equityLabels.length > 50) { equityLabels.shift(); equityHistory.shift(); }
+            equityChartInstance.update();
+        }
+
         
         const pnlPrefix = netPnl >= 0 ? '+$' : '-$';
         addLog('EXEC', `Closed ${p.side} on ${p.asset}. Net PNL: ${pnlPrefix}${Math.abs(netPnl).toFixed(2)}. ${reason}`);
@@ -693,18 +792,32 @@ function startMarketSimulation() {
 
     // 1. Live Binance WebSockets for Crypto
     try {
-        const ws = new WebSocket('wss://stream.binance.com:9443/stream?streams=btcusdt@trade/ethusdt@trade');
+        const ws = new WebSocket('wss://stream.binance.com:9443/stream?streams=btcusdt@trade/ethusdt@trade/btcusdt@depth10@100ms');
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             const stream = data.stream;
-            const price = parseFloat(data.data.p);
             
-            if (stream === 'btcusdt@trade') {
-                const btc = assets.find(a => a.symbol === 'BINANCE:BTCUSD');
-                if (btc) btc.price = price;
-            } else if (stream === 'ethusdt@trade') {
-                const eth = assets.find(a => a.symbol === 'BINANCE:ETHUSD');
-                if (eth) eth.price = price;
+            if (stream.includes('@trade')) {
+                const price = parseFloat(data.data.p);
+                const qty = parseFloat(data.data.q);
+                const usdVolume = price * qty;
+                
+                if (stream === 'btcusdt@trade') {
+                    const btc = assets.find(a => a.symbol === 'BINANCE:BTCUSD');
+                    if (btc) btc.price = price;
+                } else if (stream === 'ethusdt@trade') {
+                    const eth = assets.find(a => a.symbol === 'BINANCE:ETHUSD');
+                    if (eth) eth.price = price;
+                }
+                
+                if (usdVolume > 200000) { 
+                    const side = data.data.m ? 'SELL' : 'BUY';
+                    addLog('WHALE', 🚨 WHALE : {usdVolume.toLocaleString(undefined, {maximumFractionDigits:0})} on );
+                }
+            } else if (stream.includes('@depth')) {
+                if (state.currentAsset.symbol === 'BINANCE:BTCUSD' && typeof renderOrderBook === 'function') {
+                    renderOrderBook(data.data);
+                }
             }
         };
         setTimeout(() => addLog('SYSTEM', 'Binance WebSocket Connected. Streaming LIVE tick-by-tick Crypto orderbook data.'), 1500);
@@ -819,4 +932,20 @@ function loadState() {
     }
     updateWalletDisplay();
     renderPositions();
+}
+
+async function fetchFearAndGreed() {
+    try {
+        const response = await fetch('https://api.alternative.me/fng/');
+        const data = await response.json();
+        const fng = data.data[0];
+        const badge = document.getElementById('sentimentBadge');
+        if(badge) {
+            badge.innerText = F&G:  ();
+            const val = parseInt(fng.value);
+            if (val <= 30) badge.style.color = 'var(--accent-sell)';
+            else if (val >= 70) badge.style.color = 'var(--accent-buy)';
+            else badge.style.color = 'var(--text-primary)';
+        }
+    } catch(e) {}
 }
