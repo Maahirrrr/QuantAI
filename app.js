@@ -234,32 +234,57 @@ function toggleAutoTrade() {
     }
 }
 
+const ENTRY_FEE = 0.0002; // 0.02% VIP Maker fee (Limit Order simulation)
+const EXIT_FEE = 0.0004;  // 0.04% VIP Taker fee (Market Order execution)
+
 async function executeHFTLogic() {
     const activePositions = state.positions.filter(p => p.asset === state.currentAsset.display);
     
-    // 1. Realistic Risk Management (Strict Stop-Loss & Take-Profit with Fees)
+    // 1. Dynamic Risk Management (Trailing Stops & Take-Profit)
     state.positions.forEach(p => {
+        // Initialize extremums if missing
+        if (!p.highestPrice) p.highestPrice = p.entryPrice;
+        if (!p.lowestPrice) p.lowestPrice = p.entryPrice;
+        
+        // Track peak/valley for trailing stops
+        if (p.currentPrice > p.highestPrice) p.highestPrice = p.currentPrice;
+        if (p.currentPrice < p.lowestPrice) p.lowestPrice = p.currentPrice;
+        
         let grossPnl = 0;
-        if(p.side === 'LONG') grossPnl = (p.currentPrice - p.entryPrice) * p.size;
-        else grossPnl = (p.entryPrice - p.currentPrice) * p.size;
+        let peakPnl = 0;
+        if(p.side === 'LONG') {
+            grossPnl = (p.currentPrice - p.entryPrice) * p.size;
+            peakPnl = (p.highestPrice - p.entryPrice) * p.size;
+        } else {
+            grossPnl = (p.entryPrice - p.currentPrice) * p.size;
+            peakPnl = (p.entryPrice - p.lowestPrice) * p.size;
+        }
         
         const positionValue = p.size * p.currentPrice;
-        const entryFee = (p.size * p.entryPrice) * 0.001; // 0.1% entry fee
-        const exitFee = positionValue * 0.001;            // 0.1% exit fee
+        const entryFee = (p.size * p.entryPrice) * ENTRY_FEE; 
+        const exitFee = positionValue * EXIT_FEE;            
         
         const netPnl = grossPnl - entryFee - exitFee;
-        const pnlPct = netPnl / (p.size * p.entryPrice);
+        const netPnlPct = netPnl / (p.size * p.entryPrice);
+
+        const peakNetPnl = peakPnl - entryFee - exitFee;
+        const peakPnlPct = peakNetPnl / (p.size * p.entryPrice);
         
-        // Take Profit (+0.25% NET) | Stop Loss (-0.40% NET)
-        if (pnlPct > 0.0025) {
-            closePosition(p.id, `Take-Profit hit (+${(pnlPct*100).toFixed(2)}% net).`);
-        } else if (pnlPct < -0.0040) {
-            closePosition(p.id, `Stop-Loss triggered (${(pnlPct*100).toFixed(2)}% net).`);
+        // Advanced HFT Exit Strategy
+        if (netPnlPct < -0.0025) {
+            // Hard Stop-Loss: -0.25%
+            closePosition(p.id, `Hard stop hit (${(netPnlPct*100).toFixed(2)}% net).`);
+        } else if (netPnlPct > 0.0075) {
+            // Hard Take-Profit: +0.75% (Sudden volatility spike)
+            closePosition(p.id, `Spike Take-Profit hit (+${(netPnlPct*100).toFixed(2)}% net).`);
+        } else if (peakPnlPct > 0.0020 && (peakPnlPct - netPnlPct) > 0.0010) {
+            // Trailing Stop: If we reached at least +0.2% profit, but pulled back by 0.1%, take the money!
+            closePosition(p.id, `Trailing stop locked profit (+${(netPnlPct*100).toFixed(2)}% net).`);
         }
     });
 
     const now = Date.now();
-    // 2. Poll Backend every 15s for Macro Signal
+    // 2. Poll Backend for Macro Sentiment
     if (now - lastBackendFetch > 15000) {
         try {
             const response = await fetch(`http://127.0.0.1:8000/api/analyze?symbol=${encodeURIComponent(state.currentAsset.symbol)}`);
@@ -274,30 +299,43 @@ async function executeHFTLogic() {
         lastBackendFetch = now;
     }
 
-    // 3. Algorithmic Entry Logic (No Spamming - strictly one active position per asset)
+    // 3. Statistical Arbitrage Entry Logic (Bollinger Bands / Z-Score)
     if (activePositions.length === 0 && state.balance > 10) {
         const budgetSelection = document.getElementById('autoTradeBudget').value;
         let targetBudgetUsd = budgetSelection === 'MAX' ? state.balance : parseFloat(budgetSelection);
         if (targetBudgetUsd > state.balance) targetBudgetUsd = state.balance;
 
         let signal = 'HOLD';
+        let reason = '';
         
-        // Prioritize Backend macro trend
-        if (lastBackendData && lastBackendData.signal !== 'HOLD') {
+        // 40% chance to follow macro trend if backend signals edge
+        if (lastBackendData && lastBackendData.signal !== 'HOLD' && Math.random() > 0.6) {
             signal = lastBackendData.signal;
-        } else {
-            // Internal Scalper: Wait for a valid breakout from the 5-tick moving average
-            const price = state.currentAsset.price;
-            if (priceHistory.length >= 5) {
-                const sma5 = priceHistory.slice(-5).reduce((a,b)=>a+b, 0) / 5;
-                if (price > sma5 * 1.0003) signal = 'LONG';
-                else if (price < sma5 * 0.9997) signal = 'SHORT';
+            reason = `Macro trend alignment (Conf: ${lastBackendData.confidence}%)`;
+        } else if (priceHistory.length >= 20) {
+            // Internal Statistical Arbitrage Engine (Bollinger Z-Score)
+            const period = 20;
+            const slice = priceHistory.slice(-period);
+            const sma = slice.reduce((a,b) => a+b, 0) / period;
+            const variance = slice.reduce((a,b) => a + Math.pow(b - sma, 2), 0) / period;
+            const sd = Math.sqrt(variance);
+            
+            const currentPrice = state.currentAsset.price;
+            const zScore = sd > 0 ? (currentPrice - sma) / sd : 0;
+
+            // Stat-Arb Mean Reversion
+            if (zScore < -1.8) {
+                signal = 'LONG';
+                reason = `Stat-Arb: Z-Score ${zScore.toFixed(2)} (Oversold Deviation)`;
+            } else if (zScore > 1.8) {
+                signal = 'SHORT';
+                reason = `Stat-Arb: Z-Score ${zScore.toFixed(2)} (Overbought Deviation)`;
             }
         }
         
         if (signal !== 'HOLD') {
             executeTrade(signal, targetBudgetUsd);
-            addLog('SIGNAL', `[Algo] Breakout detected. Executing ${signal} using strict risk parameters.`);
+            addLog('SIGNAL', `[Algo Entry] ${reason}`);
         }
     }
 }
@@ -311,8 +349,8 @@ function closePosition(id, reason) {
         else grossPnl = (p.entryPrice - p.currentPrice) * p.size;
         
         const positionValue = p.size * p.currentPrice;
-        const exitFee = positionValue * 0.001;
-        const entryFee = (p.size * p.entryPrice) * 0.001;
+        const exitFee = positionValue * EXIT_FEE;
+        const entryFee = (p.size * p.entryPrice) * ENTRY_FEE;
         const netPnl = grossPnl - entryFee - exitFee;
         
         // Return margin + net pnl
@@ -348,7 +386,7 @@ function executeTrade(side, forceSizeUsd = null) {
     if (sizeUsd > state.balance) sizeUsd = state.balance;
     if (sizeUsd <= 0) return;
     
-    const fee = sizeUsd * 0.001; // 0.1% Exchange Fee
+    const fee = sizeUsd * ENTRY_FEE; // Entry Fee
     const netInvestment = sizeUsd - fee;
     const sizeAsset = netInvestment / price;
     
@@ -358,14 +396,16 @@ function executeTrade(side, forceSizeUsd = null) {
         side: side,
         entryPrice: price,
         size: sizeAsset,
-        currentPrice: price
+        currentPrice: price,
+        highestPrice: price,
+        lowestPrice: price
     });
     
     state.balance -= sizeUsd;
     saveState();
     updateWalletDisplay();
     renderPositions();
-    addLog('EXEC', `Filled ${side} ${state.currentAsset.display} @ $${price.toLocaleString()} (Size: $${netInvestment.toFixed(2)}, Fee: $${fee.toFixed(2)})`);
+    addLog('EXEC', `Filled ${side} ${state.currentAsset.display} @ $${price.toLocaleString()} (Size: $${netInvestment.toFixed(2)}, Maker Fee: $${fee.toFixed(2)})`);
 }
 
 function toggleAssetModal(show) {
@@ -523,7 +563,7 @@ function updateWalletDisplay() {
         }
         
         const positionValue = p.size * p.currentPrice;
-        const exitFee = positionValue * 0.001;
+        const exitFee = positionValue * EXIT_FEE;
         total += (p.size * p.entryPrice) + grossPnl - exitFee;
     });
     
@@ -543,8 +583,8 @@ function renderPositions() {
         }
         
         const positionValue = p.size * p.currentPrice;
-        const entryFee = (p.size * p.entryPrice) * 0.001;
-        const exitFee = positionValue * 0.001;
+        const entryFee = (p.size * p.entryPrice) * ENTRY_FEE;
+        const exitFee = positionValue * EXIT_FEE;
         const netPnl = grossPnl - entryFee - exitFee;
         
         const pnlClass = netPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
@@ -577,7 +617,7 @@ function startMarketSimulation() {
         state.lastUpdateMs = now;
         
         priceHistory.push(state.currentAsset.price);
-        if (priceHistory.length > 20) priceHistory.shift();
+        if (priceHistory.length > 60) priceHistory.shift();
         
         let pnlChanged = false;
         let todaysPnl = 0;
