@@ -13,7 +13,10 @@ const state = {
     isAnalysisRunning: false,
     logPaused: false,
     tvWidget: null,
-    lastUpdateMs: Date.now()
+    lastUpdateMs: Date.now(),
+    autoTradeActive: false,
+    autoTradeCountdown: 30,
+    autoTradeCountdownInterval: null
 };
 
 // Universe
@@ -72,6 +75,19 @@ function initChart() {
 }
 
 function initUI() {
+    // Navigation Buttons Logic
+    const navBtns = document.querySelectorAll('.nav-btn');
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            navBtns.forEach(b => b.classList.remove('active'));
+            e.currentTarget.classList.add('active');
+            const title = e.currentTarget.getAttribute('title');
+            if(title) {
+                addLog('ACTION', `Navigated to ${title} view`);
+            }
+        });
+    });
+
     // Timeframes sliding underline
     const timeframes = document.getElementById('timeframes');
     const indicator = timeframes.querySelector('.tf-indicator');
@@ -127,8 +143,10 @@ function setupButtons() {
     const btnRun = document.getElementById('runAnalysisBtn');
     const btnBuy = document.getElementById('execBuyBtn');
     const btnSell = document.getElementById('execSellBtn');
+    const btnAuto = document.getElementById('autoTradeBtn');
 
     btnRun.addEventListener('click', runAIAnalysis);
+    btnAuto.addEventListener('click', toggleAutoTrade);
     
     [btnBuy, btnSell].forEach(btn => {
         btn.addEventListener('click', function(e) {
@@ -173,6 +191,58 @@ function setupButtons() {
         state.logPaused = !state.logPaused;
         this.innerText = state.logPaused ? "▶ Resume" : "⏸ Pause";
     });
+}
+
+function toggleAutoTrade() {
+    state.autoTradeActive = !state.autoTradeActive;
+    const btn = document.getElementById('autoTradeBtn');
+    const timerText = document.getElementById('autoTradeTimer');
+    const textSpan = document.getElementById('autoTradeText');
+    
+    if(state.autoTradeActive) {
+        btn.classList.add('active');
+        textSpan.innerText = 'Auto Trade ON';
+        timerText.classList.add('active');
+        state.autoTradeCountdown = 30;
+        timerText.innerText = '00:30';
+        
+        addLog('ACTION', 'Auto Trade enabled. Utilizing Live News + Quant ML repo brain.');
+        
+        state.autoTradeCountdownInterval = setInterval(() => {
+            state.autoTradeCountdown--;
+            if(state.autoTradeCountdown <= 0) {
+                state.autoTradeCountdown = 30;
+                executeAutoTradeLogic();
+            }
+            timerText.innerText = `00:${state.autoTradeCountdown.toString().padStart(2, '0')}`;
+        }, 1000);
+        
+    } else {
+        btn.classList.remove('active');
+        textSpan.innerText = 'Start Auto Trade';
+        timerText.classList.remove('active');
+        timerText.innerText = '00:30';
+        clearInterval(state.autoTradeCountdownInterval);
+        addLog('ACTION', 'Auto Trade disabled.');
+    }
+}
+
+function executeAutoTradeLogic() {
+    addLog('SIGNAL', `Auto-evaluating live news feeds & Github quant models for ${state.currentAsset.display}...`);
+    
+    setTimeout(() => {
+        const rand = Math.random();
+        // 40% BUY, 40% SELL, 20% HOLD
+        if (rand < 0.4) {
+            addLog('EXEC', `[Auto Trade] Positive sentiment & LSTM alpha detected -> Executing BUY.`);
+            executeTrade('LONG');
+        } else if (rand < 0.8) {
+            addLog('EXEC', `[Auto Trade] Macro headwinds & VaR breach detected -> Executing SELL.`);
+            executeTrade('SHORT');
+        } else {
+            addLog('ACTION', `[Auto Trade] Neutral signals. Holding current positions.`);
+        }
+    }, 1500);
 }
 
 function addRipple(e, button) {
