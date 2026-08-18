@@ -195,7 +195,7 @@ function initUI() {
         }
     });
 
-    setupButtons();
+    setupButtons();\n    initUI();
 }
 
 function setupButtons() {
@@ -932,3 +932,28 @@ async function fetchFearAndGreed() {
         }
     } catch(e) {}
 }
+
+// Application Initialization
+document.addEventListener('DOMContentLoaded', () => {
+    initChart();
+    initEquityChart();
+    setupButtons();\n    initUI();
+    loadState();
+    startMarketSimulation();
+    startAIBackgroundProcess();
+    
+    // Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+            e.preventDefault();
+            // toggleAssetModal(true); 
+        }
+        if(e.key >= '1' && e.key <= '7' && !e.metaKey && !e.ctrlKey) {
+            const pills = document.querySelectorAll('.tf-pill');
+            const idx = parseInt(e.key) - 1;
+            if(pills[idx]) {
+                pills[idx].click();
+            }
+        }
+    });
+});
