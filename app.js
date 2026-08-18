@@ -32,6 +32,12 @@ const equityLabels = [new Date().toLocaleTimeString()];
 function initEquityChart() {
     const ctx = document.getElementById('equityChart');
     if (!ctx) return;
+    
+    // Create gradient
+    const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 150);
+    gradient.addColorStop(0, 'rgba(124, 111, 238, 0.4)');
+    gradient.addColorStop(1, 'rgba(124, 111, 238, 0.0)');
+
     equityChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
@@ -39,103 +45,74 @@ function initEquityChart() {
             datasets: [{
                 label: 'Equity ($)',
                 data: equityHistory,
-                borderColor: '#7C3AED',
-                backgroundColor: 'rgba(124, 58, 237, 0.1)',
+                borderColor: '#7C6FEE',
+                backgroundColor: gradient,
                 borderWidth: 2,
                 pointRadius: 0,
+                pointHoverRadius: 0,
                 fill: true,
-                tension: 0.2
+                tension: 0.4
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
             scales: {
                 x: { display: false },
-                y: { 
-                    grid: { color: 'rgba(255,255,255,0.05)' },
-                    ticks: { color: '#8b949e', callback: (v) => '$'+v }
-                }
-            }
+                y: { display: false }
+            },
+            layout: { padding: 0 }
         }
     });
 }
 
+
 function renderOrderBook(depthData) {
-    const asksDiv = document.getElementById('ob-asks');
-    const bidsDiv = document.getElementById('ob-bids');
-    const spreadDiv = document.getElementById('ob-spread');
-    if(!asksDiv || !bidsDiv) return;
+    const obBids = document.getElementById('obBids');
+    const obAsks = document.getElementById('obAsks');
+    const obSpread = document.getElementById('obSpread');
+    if (!obBids || !obAsks || !obSpread) return;
     
-    let htmlAsks = '';
-    let maxAskVol = 0;
-    depthData.asks.forEach(a => { maxAskVol = Math.max(maxAskVol, parseFloat(a[1])); });
+    obBids.innerHTML = '';
+    obAsks.innerHTML = '';
     
-    depthData.asks.slice(0, 8).reverse().forEach(ask => {
-        const price = parseFloat(ask[0]).toFixed(2);
-        const amt = parseFloat(ask[1]).toFixed(3);
-        const width = (parseFloat(ask[1]) / maxAskVol) * 100;
-        htmlAsks += `<div class="ob-row pnl-negative"><div class="ob-bg" style="width: ${width}%"></div><div class="ob-text"><span>${price}</span><span>${amt}</span></div></div>`;
-    });
+    const maxRows = 5;
+    let maxVol = 0;
     
-    let htmlBids = '';
-    let maxBidVol = 0;
-    depthData.bids.forEach(b => { maxBidVol = Math.max(maxBidVol, parseFloat(b[1])); });
+    for(let i = 0; i < maxRows; i++) {
+        if(depthData.bids[i]) maxVol = Math.max(maxVol, parseFloat(depthData.bids[i][1]));
+        if(depthData.asks[i]) maxVol = Math.max(maxVol, parseFloat(depthData.asks[i][1]));
+    }
     
-    depthData.bids.slice(0, 8).forEach(bid => {
-        const price = parseFloat(bid[0]).toFixed(2);
-        const amt = parseFloat(bid[1]).toFixed(3);
-        const width = (parseFloat(bid[1]) / maxBidVol) * 100;
-        htmlBids += `<div class="ob-row pnl-positive"><div class="ob-bg" style="width: ${width}%"></div><div class="ob-text"><span>${price}</span><span>${amt}</span></div></div>`;
-    });
-    
-    asksDiv.innerHTML = htmlAsks;
-    bidsDiv.innerHTML = htmlBids;
+    for (let i = 0; i < maxRows; i++) {
+        if (depthData.bids[i]) {
+            const px = parseFloat(depthData.bids[i][0]).toFixed(1);
+            const amt = parseFloat(depthData.bids[i][1]);
+            const pct = (amt / maxVol) * 100;
+            const div = document.createElement('div');
+            div.className = 'hob-row';
+            div.innerHTML = `<div class="hob-bar" style="width: ${pct}%"></div><div class="hob-val" style="color:var(--text-secondary)">${amt.toFixed(2)}</div><div class="hob-val" style="color:var(--accent-buy)">${px}</div>`;
+            obBids.appendChild(div);
+        }
+        if (depthData.asks[i]) {
+            const px = parseFloat(depthData.asks[i][0]).toFixed(1);
+            const amt = parseFloat(depthData.asks[i][1]);
+            const pct = (amt / maxVol) * 100;
+            const div = document.createElement('div');
+            div.className = 'hob-row';
+            div.innerHTML = `<div class="hob-val" style="color:var(--accent-sell)">${px}</div><div class="hob-val" style="color:var(--text-secondary)">${amt.toFixed(2)}</div><div class="hob-bar" style="width: ${pct}%"></div>`;
+            obAsks.appendChild(div);
+        }
+    }
     
     const bestAsk = parseFloat(depthData.asks[0][0]);
     const bestBid = parseFloat(depthData.bids[0][0]);
-    spreadDiv.innerText = `Spread: $${(bestAsk - bestBid).toFixed(2)}`;
+    const mid = (bestAsk + bestBid) / 2;
+    obSpread.innerText = `$${mid.toFixed(1)}`;
+    obSpread.classList.add('flash-update');
+    setTimeout(() => obSpread.classList.remove('flash-update'), 300);
 }
-
-const priceHistory = [];
-
-// Universe
-const assets = [
-    { symbol: 'BINANCE:BTCUSD', display: 'BTC/USD', name: 'Bitcoin', icon: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png', price: 65000, change: '+2.4%' },
-    { symbol: 'BINANCE:ETHUSD', display: 'ETH/USD', name: 'Ethereum', icon: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png', price: 3400, change: '+1.1%' },
-    { symbol: 'NASDAQ:AAPL', display: 'AAPL', name: 'Apple Inc.', icon: 'https://companieslogo.com/img/orig/AAPL-12345678.png', price: 175.50, change: '-0.5%' },
-    { symbol: 'NASDAQ:TSLA', display: 'TSLA', name: 'Tesla Inc.', icon: 'https://companieslogo.com/img/orig/TSLA-12345678.png', price: 210.20, change: '+4.2%' },
-    { symbol: 'NASDAQ:NVDA', display: 'NVDA', name: 'NVIDIA Corp.', icon: 'https://companieslogo.com/img/orig/NVDA-12345678.png', price: 890.00, change: '+1.8%' },
-    { symbol: 'BSE:RELIANCE', display: 'RELIANCE', name: 'Reliance Ind.', icon: 'https://companieslogo.com/img/orig/RELIANCE.NS-12345678.png', price: 2950.00, change: '+0.8%' },
-    { symbol: 'BSE:HDFCBANK', display: 'HDFC', name: 'HDFC Bank', icon: 'https://companieslogo.com/img/orig/HDFCBANK.NS-12345678.png', price: 1450.00, change: '-1.2%' },
-    { symbol: 'BSE:TATAMOTORS', display: 'TATAMOTORS', name: 'Tata Motors', icon: 'https://companieslogo.com/img/orig/TATAMOTORS.NS-12345678.png', price: 980.00, change: '+3.4%' }
-];
-
-document.addEventListener('DOMContentLoaded', () => {
-    initChart();
-    initUI();
-    loadState();
-    startMarketSimulation();
-    startAIBackgroundProcess();
-    
-    // Shortcuts
-    document.addEventListener('keydown', (e) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-            e.preventDefault();
-            toggleAssetModal(true);
-        }
-        // 1-7 for timeframes
-        if(e.key >= '1' && e.key <= '7' && !e.metaKey && !e.ctrlKey) {
-            const pills = document.querySelectorAll('.tf-pill');
-            const idx = parseInt(e.key) - 1;
-            if(pills[idx]) {
-                pills[idx].click();
-            }
-        }
-    });
-});
-
 function initChart() {
     state.tvWidget = new TradingView.widget({
         "autosize": true,
@@ -198,12 +175,12 @@ function initUI() {
     const assetModal = document.getElementById('assetModal');
     const searchInput = document.getElementById('assetSearch');
     
-    assetBtn.addEventListener('click', () => toggleAssetModal(true));
-    assetModal.addEventListener('click', (e) => {
+    if(assetBtn) assetBtn.addEventListener('click', () => toggleAssetModal(true));
+    if(assetModal) assetModal.addEventListener('click', (e) => {
         if(e.target === assetModal) toggleAssetModal(false);
     });
 
-    searchInput.addEventListener('input', renderAssetList);
+    if(searchInput) searchInput.addEventListener('input', renderAssetList);
 
     // Collapsible
     window.toggleSection = function(id) {
@@ -212,7 +189,7 @@ function initUI() {
 
     // Right panel toggle for mobile/tablet
     const portfolioBtn = document.querySelector('.nav-btn[title="Portfolio"]');
-    portfolioBtn.addEventListener('click', () => {
+    if(portfolioBtn) portfolioBtn.addEventListener('click', () => {
         if(window.innerWidth <= 1280) {
             document.getElementById('rightPanel').classList.toggle('open');
         }
@@ -227,11 +204,11 @@ function setupButtons() {
     const btnSell = document.getElementById('execSellBtn');
     const btnAuto = document.getElementById('autoTradeBtn');
 
-    btnRun.addEventListener('click', runAIAnalysis);
-    btnAuto.addEventListener('click', toggleAutoTrade);
+    if(btnRun) btnRun.addEventListener('click', runAIAnalysis);
+    if(btnAuto) btnAuto.addEventListener('click', toggleAutoTrade);
     
     [btnBuy, btnSell].forEach(btn => {
-        btn.addEventListener('click', function(e) {
+        if(btn) btn.addEventListener('click', function(e) {
             addRipple(e, this);
             const isBuy = this.id === 'execBuyBtn';
             
@@ -286,9 +263,9 @@ function setupButtons() {
         addLog('ACTION', `Force closed all ${idsToClose.length} active positions.`);
     });
 
-    document.getElementById('pauseLogBtn').addEventListener('click', function() {
+    document.getElementById('pauseLogToggle').addEventListener('click', function() {
         state.logPaused = !state.logPaused;
-        this.innerText = state.logPaused ? "▶ Resume" : "⏸ Pause";
+        this.classList.toggle('active');
     });
 }
 
@@ -727,59 +704,53 @@ function updateWalletDisplay() {
 
 function renderPositions() {
     const tbody = document.getElementById('positionsBody');
+    if (!tbody) return;
     tbody.innerHTML = '';
     
-    state.positions.slice(-8).forEach(p => {
-        let grossPnl = 0;
-        if(p.side === 'LONG') {
-            grossPnl = (p.currentPrice - p.entryPrice) * p.size;
-        } else {
-            grossPnl = (p.entryPrice - p.currentPrice) * p.size;
-        }
-        
-        const positionValue = p.size * p.currentPrice;
-        const entryFee = (p.size * p.entryPrice) * ENTRY_FEE;
-        const exitFee = positionValue * EXIT_FEE;
-        const netPnl = grossPnl - entryFee - exitFee;
-        
-        const pnlClass = netPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-        const pnlPrefix = netPnl >= 0 ? '▲' : '▼';
-        
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td class="asset-col">${p.asset}</td>
-            <td><span class="badge-${p.side.toLowerCase()}">${p.side}</span></td>
-            <td>$${p.entryPrice.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
-            <td>${p.size.toFixed(4)}</td>
-            <td class="pnl-col ${pnlClass}">${pnlPrefix} $${Math.abs(netPnl).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
-function updateMetricsDisplay() {
-    const totalTrades = state.metrics.wins + state.metrics.losses;
-    const winRate = totalTrades > 0 ? (state.metrics.wins / totalTrades) * 100 : 0;
+    let totalUnrealized = 0;
     
-    const avgWin = state.metrics.wins > 0 ? state.metrics.totalWinUsd / state.metrics.wins : 0;
-    const avgLoss = state.metrics.losses > 0 ? state.metrics.totalLossUsd / state.metrics.losses : 0;
+    if (state.positions.length === 0) {
+        tbody.innerHTML = '<div class="empty-state"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5H5a2 2 0 0 1 0-4h16V7"/></svg>No open positions</div>';
+    } else {
+        state.positions.forEach(p => {
+            const isLong = p.side === 'LONG';
+            const diff = isLong ? p.currentPrice - p.entryPrice : p.entryPrice - p.currentPrice;
+            const pnl = diff * p.size;
+            totalUnrealized += pnl;
+            
+            const pnlColor = pnl >= 0 ? 'var(--accent-buy)' : 'var(--accent-sell)';
+            const assetInfo = assets.find(a => a.display === p.asset) || {icon: '', display: p.asset};
+            
+            const div = document.createElement('div');
+            div.className = `pos-row ${isLong ? 'long' : 'short'}`;
+            div.innerHTML = `
+                <div class="pos-asset">
+                    <img src="${assetInfo.icon}" class="pos-icon">
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        <span class="pos-name">${p.asset}</span>
+                        <span class="pos-pill ${isLong ? 'long' : 'short'}">${p.side}</span>
+                    </div>
+                </div>
+                <div class="pos-price">
+                    $${p.entryPrice.toLocaleString(undefined, {maximumFractionDigits:2})}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    <span style="color:var(--text-primary);">$${p.currentPrice.toLocaleString(undefined, {maximumFractionDigits:2})}</span>
+                </div>
+                <div class="pos-pnl" style="color: ${pnlColor}">
+                    ${pnl >= 0 ? '+' : ''}$${pnl.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}
+                </div>
+            `;
+            tbody.appendChild(div);
+        });
+    }
     
-    const winPct = winRate / 100;
-    const lossPct = 1 - winPct;
-    const expectancy = (winPct * avgWin) - (lossPct * avgLoss);
-    
-    const currentEquity = calculateTotalEquity();
-    const drawdown = ((state.startBalance - currentEquity) / state.startBalance) * 100;
-    
-    if(document.getElementById('winRateDisplay')) document.getElementById('winRateDisplay').innerText = `${winRate.toFixed(1)}%`;
-    if(document.getElementById('expectancyDisplay')) document.getElementById('expectancyDisplay').innerText = `$${expectancy.toFixed(2)}`;
-    if(document.getElementById('drawdownDisplay')) document.getElementById('drawdownDisplay').innerText = `${drawdown > 0 ? drawdown.toFixed(2) : 0.00}%`;
-    
-    // Kill Switch: 1.5% Daily Drawdown Limit
-    if (drawdown > 1.5 && state.autoTradeActive) {
-        addLog('ERROR', `[KILL SWITCH] Max daily drawdown exceeded (1.5%). Systematic algo halted.`);
-        toggleAutoTrade();
-        document.getElementById('autoTradeBtn').disabled = true;
+    // Update daily pill (using unrealized PNL roughly as daily change)
+    if(document.getElementById('dailyPill')) {
+        const pill = document.getElementById('dailyPill');
+        const pct = state.balance > 0 ? (totalUnrealized / state.balance) * 100 : 0;
+        pill.className = `daily-pill ${pct >= 0 ? 'positive' : 'negative'}`;
+        pill.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${pct >= 0 ? 'M12 19V5M5 12l7-7 7 7' : 'M12 5v14M5 12l7 7 7-7'}"/></svg>
+        <span>${Math.abs(pct).toFixed(2)}%</span>`;
     }
 }
 

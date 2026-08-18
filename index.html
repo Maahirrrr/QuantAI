@@ -1,247 +1,162 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuantAI Bot - Pro Terminal</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono&family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+    <title>QuantAI - Modern Trading Terminal</title>
     <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="layout">
-        <!-- LEFT NAV -->
-        <nav class="left-nav">
-            <div class="logo-container">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2L2 7V17L12 22L22 17V7L12 2Z" stroke="var(--accent-primary)" stroke-width="2" stroke-linejoin="round"/>
-                    <circle cx="12" cy="12" r="3" fill="var(--accent-primary)"/>
-                </svg>
-            </div>
-            <div class="nav-icons">
-                <button class="nav-btn active" title="Chart">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 9l-5 5-4-4-4 4"/></svg>
-                </button>
-                <button class="nav-btn" title="Portfolio">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-                </button>
-                <button class="nav-btn" title="Signals">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                </button>
-                <button class="nav-btn" title="History">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                </button>
-            </div>
-            <div class="nav-bottom">
-                <button class="nav-btn" title="Settings">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                </button>
-            </div>
-        </nav>
 
-        <!-- CHART AREA -->
-        <main class="chart-area">
-            <div class="toolbar">
-                <button class="asset-selector" id="assetSelectorBtn">
-                    <img src="https://assets.coingecko.com/coins/images/1/small/bitcoin.png" alt="BTC" width="16" height="16" id="assetIcon">
-                    <span class="ticker" id="currentTicker">BTC/USD</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-                </button>
+    <div class="app-container">
+        <!-- Left Sidebar -->
+        <aside class="left-sidebar">
+            <a href="#" class="nav-item active">
+                <div class="nav-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5H5a2 2 0 0 1 0-4h16V7"/></svg>
+                </div>
+                <span>Terminal</span>
+            </a>
+            <a href="#" class="nav-item">
+                <div class="nav-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                </div>
+                <span>AI Models</span>
+            </a>
+            <a href="#" class="nav-item" id="resetWalletBtn">
+                <div class="nav-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </div>
+                <span>Reset Wallet</span>
+            </a>
+        </aside>
 
-                <div class="timeframes" id="timeframes">
-                    <div class="tf-pill">1m</div>
-                    <div class="tf-pill">5m</div>
+        <!-- Main Chart Area -->
+        <main class="main-content">
+            <header class="chart-header">
+                <div class="asset-title-area">
+                    <img src="https://assets.coingecko.com/coins/images/1/small/bitcoin.png" alt="BTC" class="asset-icon" id="assetIcon">
+                    <span class="asset-name" id="currentTicker">BTC/USD</span>
+                </div>
+                <div class="timeframe-pills" id="timeframes">
                     <div class="tf-pill">15m</div>
                     <div class="tf-pill">1h</div>
                     <div class="tf-pill active">4h</div>
                     <div class="tf-pill">D</div>
-                    <div class="tf-pill">W</div>
-                    <div class="tf-indicator"></div>
                 </div>
+            </header>
 
-                <div class="toolbar-right">
-                    <div class="live-pnl" id="livePnl">
-                        <span class="dir-arrow">▲</span>
-                        <div class="pnl-slot-wrapper">
-                            <span class="pnl-value">+$0.00</span>
-                        </div>
-                        <span class="pnl-label">today</span>
-                    </div>
-                    <div class="connection-status">
-                        <div class="dot live" id="connDot"></div>
-                    </div>
+            <div class="chart-container-wrapper">
+                <div id="tv_chart_container"></div>
+                <div class="floating-ai-badge">
+                    <div class="pulse-dot"></div>
+                    <span id="aiBadgeText">AI Signal Active</span>
                 </div>
-            </div>
-
-            <div style="display: flex; flex: 1; min-height: 0; overflow: hidden; gap: 1px;">
-                <div class="tv-embed-container" id="tv_chart_container" style="flex: 1;"></div>
-                <div class="order-book" style="width: 250px; background: var(--bg-surface); display: flex; flex-direction: column; border-left: 1px solid var(--border);">
-                    <div class="section-header" style="padding: 8px 16px; border-bottom: 1px solid var(--border);">
-                        <h3 style="font-size: 11px;">L2 Order Book</h3>
-                    </div>
-                    <div style="display: flex; flex-direction: column; flex: 1; overflow: hidden; padding-bottom: 8px;">
-                        <div id="ob-asks" style="display: flex; flex-direction: column-reverse; flex: 1; overflow: hidden; color: var(--accent-sell);"></div>
-                        <div id="ob-spread" style="text-align: center; font-weight: bold; padding: 4px; font-size: 14px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">Spread</div>
-                        <div id="ob-bids" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; color: var(--accent-buy);"></div>
+                <!-- Signature Element: Frosted Glass Overlay -->
+                <div class="glass-ai-overlay" id="aiOverlay">
+                    <div class="glass-ai-card">
+                        <svg class="ai-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(45 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-45 12 12)"/></svg>
+                        <div class="ai-title" id="overlayTitle">AI SIGNAL</div>
+                        <div class="ai-desc" id="overlayDesc">High probability short setup detected based on MACD divergence and weighted NLP processing.</div>
+                        <button class="ai-action-btn" id="overlayBtn">Acknowledge</button>
                     </div>
                 </div>
             </div>
 
-            <div class="signal-feed-bar" id="bottomSignalFeed">
-                <div class="feed-content">
-                    <span class="feed-icon">⚡</span>
-                    <span class="feed-text">AI Signal Engine initialized. Waiting for market alpha...</span>
+            <!-- Horizontal Order Book -->
+            <div class="horizontal-order-book">
+                <div class="hob-header">L2 DEPTH</div>
+                <div class="hob-container">
+                    <div class="hob-bids" id="obBids">
+                        <!-- Injected via JS -->
+                    </div>
+                    <div class="hob-mid" id="obSpread">
+                        $0.00
+                    </div>
+                    <div class="hob-asks" id="obAsks">
+                        <!-- Injected via JS -->
+                    </div>
                 </div>
             </div>
         </main>
 
-        <!-- RIGHT PANEL -->
-        <aside class="right-panel" id="rightPanel">
-            <div class="panel-header">
-                <h2>Portfolio</h2>
-                <div class="portfolio-value">
-                    <span class="mono" id="walletBalance">$10,000.00</span>
-                    <button class="reset-wallet-btn" id="resetWalletBtn" title="Reset Wallet">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                    </button>
+        <!-- Right Panel (Stacked Cards) -->
+        <aside class="right-panel">
+            <!-- Portfolio Card -->
+            <div class="ios-card portfolio-card">
+                <div class="section-title">Portfolio</div>
+                <div class="portfolio-header">
+                    <div class="portfolio-balance" id="walletBalance">$10,000.00</div>
+                    <div class="daily-pill positive" id="dailyPill">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                        <span>0.0%</span>
+                    </div>
+                </div>
+                <div class="equity-chart-wrapper">
+                    <canvas id="equityChart"></canvas>
+                </div>
+                <div class="mini-stats">
+                    <div class="stat-col">
+                        <span class="stat-label">Win Rate</span>
+                        <span class="stat-val" id="winRateDisplay">0.0%</span>
+                    </div>
+                    <div class="stat-col">
+                        <span class="stat-label">Expectancy</span>
+                        <span class="stat-val" id="expectancyDisplay">$0.00</span>
+                    </div>
+                    <div class="stat-col">
+                        <span class="stat-label">Drawdown</span>
+                        <span class="stat-val" id="drawdownDisplay">0.00%</span>
+                    </div>
+                </div>
+                
+                <!-- Hidden inputs for compatibility with old JS -->
+                <select id="autoTradeBudget" style="display:none;"><option value="KELLY" selected></option></select>
+                <div id="confidenceValue" style="display:none;"></div>
+            </div>
+
+            <!-- Positions Card -->
+            <div class="ios-card positions-card">
+                <div class="positions-header">
+                    <div class="section-title" style="margin:0;">Open Positions</div>
+                    <button class="btn-destructive" id="closeAllBtn">Close All</button>
+                </div>
+                <div class="positions-list" id="positionsBody">
+                    <!-- Injected via JS -->
                 </div>
             </div>
 
-            <!-- AI Engine -->
-            <section class="ai-engine section-collapsible" id="aiEngineSection">
-                <div class="section-header" onclick="toggleSection('aiEngineSection')">
-                    <h3>AI Engine</h3>
-                    <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
-                </div>
-                <div class="section-content">
-                    <div class="status-row" title="Models trained on:\n- cantaro86/Financial-Models-Numerical-Methods\n- stefan-jansen/machine-learning-for-trading\n- LechGrzelak/Computational-Finance-Course\n- wilsonfreitas/awesome-quant\n- Shubhamsaboo/awesome-llm-apps">
-                        <span class="model-name">GradientBoost ML + Weighted NLP <svg style="display:inline; margin-left:4px; opacity:0.6" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span>
-                        <span class="badge badge-active">Active</span>
+            <!-- Signals Card -->
+            <div class="ios-card signals-card">
+                <div class="signals-header">
+                    <div class="ai-pulse-header">
+                        <div class="ai-pulse"></div>
+                        <div class="section-title" style="margin:0; color:var(--text-primary);">AI Engine</div>
                     </div>
-                    
-                    <div class="confidence-container">
-                        <div class="confidence-header">
-                            <span>Confidence</span>
-                            <span class="mono" id="confidenceValue">0%</span>
-                        </div>
-                        <div class="confidence-meter" id="confidenceMeter">
-                            <div class="block"></div>
-                            <div class="block"></div>
-                            <div class="block"></div>
-                            <div class="block"></div>
-                            <div class="block"></div>
-                        </div>
-                    </div>
-
-                    <div class="stats-grid">
-                        <div class="stat-box">
-                            <span class="stat-label">Win Rate</span>
-                            <span class="stat-value" id="winRateDisplay">0.0%</span>
-                        </div>
-                        <div class="stat-box">
-                            <span class="stat-label">Expectancy</span>
-                            <span class="stat-value" id="expectancyDisplay">$0.00</span>
-                        </div>
-                        <div class="stat-box">
-                            <span class="stat-label">Drawdown</span>
-                            <span class="stat-value" id="drawdownDisplay">0.00%</span>
-                        </div>
-                    </div>
-
-                    <button class="cta-primary" id="runAnalysisBtn">
-                        <svg class="atom-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="3"/>
-                            <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(45 12 12)"/>
-                            <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-45 12 12)"/>
-                        </svg>
-                        <span>Run Analysis</span>
-                    </button>
-
-                    <div class="action-buttons">
-                        <button class="ghost-btn execute-buy" id="execBuyBtn">Execute BUY</button>
-                        <button class="ghost-btn execute-sell" id="execSellBtn">Execute SELL</button>
-                    </div>
-
-                    <div class="auto-trade-config">
-                        <div class="budget-selector">
-                            <span class="label">Position Sizing:</span>
-                            <select id="autoTradeBudget" class="budget-dropdown">
-                                <option value="KELLY" selected>Kelly Criterion (Dynamic)</option>
-                                <option value="RISK_0.5">Strict 0.5% Risk</option>
-                                <option value="1000">$1,000 / trade</option>
-                                <option value="2000">$2,000 / trade</option>
-                                <option value="5000">$5,000 / trade</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="auto-trade-wrapper">
-                        <button class="auto-trade-btn" id="autoTradeBtn">
-                            <div class="status-dot"></div>
-                            <span id="autoTradeText">Start Auto Trade</span>
-                        </button>
-                        <div class="timer-text mono" id="autoTradeTimer">00:30</div>
-                    </div>
+                    <div class="ios-toggle" id="pauseLogToggle"></div>
                 </div>
-            </section>
-
-            <!-- Positions -->
-            <section class="positions">
-                <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3>Positions</h3>
-                    <button class="ghost-btn" id="closeAllBtn" style="height: 24px; padding: 0 8px; font-size: 10px; color: var(--accent-sell); border-color: rgba(255, 69, 96, 0.3);">Close All</button>
+                <div class="signal-list" id="signalLog">
+                    <!-- Injected via JS -->
                 </div>
-                <div class="table-container">
-                    <table class="pos-table">
-                        <thead>
-                            <tr>
-                                <th>ASSET</th>
-                                <th>SIDE</th>
-                                <th>ENTRY</th>
-                                <th>SIZE</th>
-                                <th>PNL</th>
-                            </tr>
-                        </thead>
-                        <tbody id="positionsBody">
-                            <!-- Injected via JS -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- Equity Curve -->
-            <section class="equity-curve" style="padding: 16px 0; border-bottom: 1px solid var(--border);">
-                <div class="section-header">
-                    <h3>Equity Curve</h3>
-                </div>
-                <div style="height: 150px; position: relative;">
-                    <canvas id="equityChart"></canvas>
-                </div>
-            </section>
-
-            <!-- Signal Log -->
-            <section class="signal-log-section">
-                <div class="section-header">
-                    <h3>Signal Log</h3>
-                    <button class="pause-log" id="pauseLogBtn">⏸ Pause</button>
-                </div>
-                <div class="log-container" id="signalLog">
-                    <!-- Logs go here -->
-                </div>
-            </section>
+            </div>
         </aside>
     </div>
 
-    <!-- Asset Modal -->
-    <div class="modal-overlay" id="assetModal">
-        <div class="modal-content">
-            <input type="text" class="search-input" id="assetSearch" placeholder="Search assets (Cmd+K)..." autocomplete="off">
-            <div class="asset-list" id="assetList">
-                <!-- Injected via JS -->
+    <!-- Status Bar -->
+    <footer class="bottom-bar">
+        <div class="status-left">
+            <div class="status-pill">
+                <div class="status-dot"></div>
+                <span>Systematic Algo Active</span>
             </div>
+            <span class="mono" style="color:var(--text-primary);" id="autoTradeBtn">AutoTrade: ON</span>
         </div>
-    </div>
+        <div class="status-right">
+            <span>Model: GradientBoost + NLP</span>
+            <span class="mono" id="connDot">13 ms</span>
+        </div>
+    </footer>
 
     <!-- TradingView Lightweight Charts & Chart.js -->
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
