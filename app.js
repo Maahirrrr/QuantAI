@@ -60,6 +60,11 @@ function initEquityChart() {
     const ctx = document.getElementById('equityChart');
     if (!ctx) return;
     
+    if (equityChartInstance) {
+        equityChartInstance.destroy();
+    }
+
+    
     // Create gradient
     const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 150);
     gradient.addColorStop(0, 'rgba(124, 111, 238, 0.4)');
@@ -964,13 +969,20 @@ async function fetchFearAndGreed() {
 
 // Application Initialization
 document.addEventListener('DOMContentLoaded', () => {
-    initChart();
-    initEquityChart();
-    setupButtons();
-    initUI();
-    loadState();
-    startMarketSimulation();
-    startAIBackgroundProcess();
+    try {
+        if (typeof TradingView !== 'undefined') {
+            initChart();
+        } else {
+            console.error('TradingView library not loaded.');
+            addLog('ERROR', 'TradingView widget failed to load (Check adblocker).');
+        }
+    } catch(e) { console.error('TV Error:', e); }
+
+    try { setupButtons(); } catch(e) { console.error('Setup Error:', e); }
+    try { initUI(); } catch(e) { console.error('UI Error:', e); }
+    try { loadState(); } catch(e) { console.error('State Error:', e); }
+    try { startMarketSimulation(); } catch(e) { console.error('Market Error:', e); }
+    try { startAIBackgroundProcess(); } catch(e) { console.error('AI Error:', e); }
     
     // Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
