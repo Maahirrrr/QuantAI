@@ -136,7 +136,7 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
-#tv_chart_container { flex: 1; }
+#tv_chart_container { flex: 1; height: 100%; width: 100%; min-height: 400px; }
 
 .floating-ai-badge {
     position: absolute;

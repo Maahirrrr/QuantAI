@@ -1,3 +1,30 @@
+
+window.addEventListener('error', function(e) {
+    const err = document.createElement('div');
+    err.style.position = 'fixed';
+    err.style.top = '0';
+    err.style.left = '0';
+    err.style.zIndex = '9999';
+    err.style.background = 'red';
+    err.style.color = 'white';
+    err.style.padding = '20px';
+    err.style.width = '100%';
+    err.innerHTML = 'ERROR: ' + e.message + ' at ' + e.filename + ':' + e.lineno;
+    document.body.appendChild(err);
+});
+window.addEventListener('unhandledrejection', function(e) {
+    const err = document.createElement('div');
+    err.style.position = 'fixed';
+    err.style.top = '50px';
+    err.style.left = '0';
+    err.style.zIndex = '9999';
+    err.style.background = 'orange';
+    err.style.color = 'white';
+    err.style.padding = '20px';
+    err.style.width = '100%';
+    err.innerHTML = 'PROMISE REJECTION: ' + e.reason;
+    document.body.appendChild(err);
+});
 // App State
 const state = {
     startBalance: 10000.00,
@@ -149,12 +176,12 @@ function initUI() {
 
     // Timeframes sliding underline
     const timeframes = document.getElementById('timeframes');
-    const indicator = timeframes.querySelector('.tf-indicator');
+    const indicator = timeframes ? timeframes.querySelector('.tf-indicator') : null;
     const pills = timeframes.querySelectorAll('.tf-pill');
     
     const updateIndicator = (activeElement) => {
-        indicator.style.width = `${activeElement.offsetWidth}px`;
-        indicator.style.left = `${activeElement.offsetLeft}px`;
+        if(indicator) indicator.style.width = `${activeElement.offsetWidth}px`;
+        if(indicator) indicator.style.left = `${activeElement.offsetLeft}px`;
     };
     
     setTimeout(() => updateIndicator(document.querySelector('.tf-pill.active')), 100);
@@ -195,7 +222,8 @@ function initUI() {
         }
     });
 
-    setupButtons();\n    initUI();
+    setupButtons();
+    initUI();
 }
 
 function setupButtons() {
@@ -862,6 +890,7 @@ function startMarketSimulation() {
 let lastPnlStr = "";
 function updateLivePnlSlot(pnlVal) {
     const livePnl = document.getElementById('livePnl');
+    if (!livePnl) return;
     const isPos = pnlVal >= 0;
     const absVal = Math.abs(pnlVal).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
     const newStr = `${isPos ? '+' : '-'}$${absVal}`;
@@ -937,7 +966,8 @@ async function fetchFearAndGreed() {
 document.addEventListener('DOMContentLoaded', () => {
     initChart();
     initEquityChart();
-    setupButtons();\n    initUI();
+    setupButtons();
+    initUI();
     loadState();
     startMarketSimulation();
     startAIBackgroundProcess();
