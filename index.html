@@ -121,7 +121,7 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
 .ibtn:hover{background:var(--s3);color:var(--t2)}
 .ibtn.active{background:var(--bd);color:var(--b);border-color:rgba(78,143,255,.3)}
 .cb-right{margin-left:auto;padding-left:10px;font-family:var(--mono);font-size:10px;color:var(--t3);flex-shrink:0;white-space:nowrap}
-#tvChart{flex:1;min-height:0}
+#tvChart{flex:1;min-height:0;width:100%}
 
 /* ═══ SIGNALS ════════════════════════════════════════════════ */
 .sig-strip{flex-shrink:0;background:var(--s1);border-top:1px solid var(--b1)}
@@ -271,7 +271,9 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
   .log-in-chart{display:flex!important}
   .sig-grid{grid-template-columns:repeat(5,1fr)}
   .sig-cell{border-top:none;border-right:1px solid var(--b1)}
-  .sig-cell:last-child{border-right:none;grid-column:auto}
+  .sig-cell:nth-child(2n){border-right:1px solid var(--b1)}
+  .sig-cell:nth-child(n+3){border-top:none}
+  .sig-cell:last-child{border-right:none}
   .toolbar{flex-wrap:nowrap;padding-bottom:8px}
   .toolbar-st{flex:1 1 auto;order:0}
   .ibtn:hover{cursor:pointer}
@@ -472,6 +474,8 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
   <button class="btn btn-add" onclick="topUp()" title="Add $500 demo funds (T)">+$500<span class="kbd-hint">T</span></button>
   <button class="btn" id="bscalp" onclick="toggleScalp()" title="Toggle Scalp Mode (fast local engine)" style="background:var(--s2);color:var(--t2);border-color:var(--b2);">⚡ Scalp Mode</button>
   <div class="toolbar-st" id="fst">Select coin → Start Bot</div>
+</div>
+
 </div><!-- .app -->
 
 <script>
@@ -515,8 +519,12 @@ let tvWidget=null,currentInterval='1';
 
 function initTV(sym){
   const container=document.getElementById('tvChart');
+  if(!window.TradingView){
+    container.innerHTML='<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#50506a;font-size:12px;font-family:monospace">TradingView loading…</div>';
+    setTimeout(()=>initTV(sym), 300);
+    return;
+  }
   container.innerHTML='';
-  if(!window.TradingView)return;
   try{
     tvWidget=new TradingView.widget({
       container_id:'tvChart',symbol:TV_SYMBOLS[sym]||'BINANCE:BTCUSDT',
@@ -561,10 +569,7 @@ const ts=()=>new Date().toTimeString().slice(0,8);
 const r2=n=>Math.round(n*100)/100;
 const usd=(n,sign=false)=>{
   const abs=Math.abs(n);
-  const s='
-</body>
-</html>
-+abs.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:abs<1?4:2});
+  const s='$'+abs.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:abs<1?4:2});
   return sign?(n>=0?'+':'-')+s:s;
 };
 const fmtSecs=s=>s>=60?Math.floor(s/60)+'m '+(s%60)+'s':s+'s';
@@ -691,10 +696,7 @@ function renderOB(){
     bh+=`<div class="ob-row"><div class="ob-bg" style="width:${w}%;background:var(--g)"></div><span class="ob-b" style="${!S.price?'color:var(--t3)':''}">${px}</span><span class="ob-q">${q}</span></div>`;
   }
   $('ob-asks-wrap').innerHTML=ah;$('ob-bids-wrap').innerHTML=bh;
-  $('obspr').textContent='Spread 
-</body>
-</html>
-+(step*2).toFixed(2);
+  $('obspr').textContent='Spread $'+(step*2).toFixed(2);
 }
 
 function renderVol(){
@@ -1027,7 +1029,7 @@ async function runAI(ind,canClose,heldSecs){
   $('aifill').classList.add('on');
   setStatus('on','AI');
   $('fst').innerHTML='<span class="spin"></span>Claude confirming signal…';
-  addLog('ai',`Claude called · score ${ind.smooth}/5 · ${S.price.toFixed(2)}`);
+  addLog('ai',`Claude called · score ${ind.smooth}/5 · $${S.price.toFixed(2)}`);
   const prompt=`Quant paper trader. Score ${ind.smooth}/5 ambiguous signal.
 
 ${S.sym}/USDT:
@@ -1036,11 +1038,11 @@ RSI(14): ${ind.rsi.toFixed(1)} ${ind.rsiOS?'OVERSOLD':ind.rsiOB?'OVERBOUGHT':'NE
 ATR: ${ind.atrPct.toFixed(3)}% ${ind.atrOk?'LOW-VOL':'HIGH-VOL'}
 MACD: ${ind.macdBull?'BULL CROSS':ind.macdBear?'BEAR CROSS':'FLAT'}
 Price Z-score (20p): ${ind.priceZ.toFixed(2)}
-Price: ${S.price.toFixed(2)}
+Price: $${S.price.toFixed(2)}
 
-Portfolio: Bal=${S.bal.toFixed(2)} Free=${(S.bal-S.exp).toFixed(2)}
-Position: ${S.pos?`${S.pos.side}@${S.pos.entry.toFixed(2)} held=${heldSecs}s canClose=${canClose}`:'NONE'}
-TP=+${ind.tpPct}% SL=-${ind.slPct}% Size=${safeSize.toFixed(2)}
+Portfolio: Bal=$${S.bal.toFixed(2)} Free=$${(S.bal-S.exp).toFixed(2)}
+Position: ${S.pos?`${S.pos.side}@$${S.pos.entry.toFixed(2)} held=${heldSecs}s canClose=${canClose}`:'NONE'}
+TP=+${ind.tpPct}% SL=-${ind.slPct}% Size=$${safeSize.toFixed(2)}
 
 BUY if conf≥68 and no position. SELL if position and canClose=${canClose} and conf≥60. Else HOLD.
 
@@ -1115,10 +1117,7 @@ function tick(){
   S.price=r2(Math.max(.001,S.price+drift));
   S.prices.push(S.price);if(S.prices.length>120)S.prices.shift();
   const fp=S.price<10?4:2;
-  $('tp-price').textContent='
-</body>
-</html>
-+S.price.toLocaleString('en-US',{minimumFractionDigits:fp,maximumFractionDigits:fp});
+  $('tp-price').textContent='$'+S.price.toLocaleString('en-US',{minimumFractionDigits:fp,maximumFractionDigits:fp});
   if(S.prices.length>1){
     const pct=r2((S.price-S.prices[0])/S.prices[0]*100);
     const cel=$('tp-chg');cel.style.display='inline-block';
@@ -1191,13 +1190,12 @@ document.addEventListener('keydown',(e)=>{
 });
 
 // ── INIT ──────────────────────────────────────────────────────────
+initTV('BTC');
 addLog('ai','QuantAI v14 · Kelly-lite · Vol Gate (one-sided) · 5-Signal · Drawdown Breaker · Scalp Mode');
 addLog('ai','Swing: 5/5→local BUY · 4/5→Claude AI · 0/5→local SELL | Scalp: EMA(5/13)+RSI(7) both-agree');
 renderStats();
 renderOB();
 renderVol();
-// Delay TV init so the flex container has computed dimensions before widget tries to measure
-setTimeout(()=>initTV('BTC'), 100);
 
 </script>
 </body>
