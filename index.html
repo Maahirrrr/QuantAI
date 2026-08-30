@@ -269,10 +269,10 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
   .panel-ai{border-left:none}
   .panel-log{display:none!important}
   .log-in-chart{display:flex!important}
-  .sig-grid{grid-template-columns:repeat(4,1fr)}
+  .sig-grid{grid-template-columns:repeat(5,1fr)}
   .sig-cell:nth-child(2n){border-right:1px solid var(--b1)}
   .sig-cell:nth-child(n+3){border-top:none}
-  .sig-cell:last-child{border-right:none}
+  .sig-cell:last-child{border-right:none;grid-column:auto}
   .toolbar{flex-wrap:nowrap;padding-bottom:8px}
   .toolbar-st{flex:1 1 auto;order:0}
   .ibtn:hover{cursor:pointer}
@@ -390,12 +390,7 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
       <div class="sig-hdr">
         <span class="sig-title">Signal Engine</span>
         <div class="pips">
-          <div class="pip" id="pip0"></div><div class="pip" id="pip1"></div>
-          <div class="pip" id="pip2"></div><div class="pip" id="pip3"></div><div class="pip" id="pip4"></div>
-        </div><div class="pip" id="pip1"></div>
-          <div class="pip" id="pip2"></div><div class="pip" id="pip3"></div><div class="pip" id="pip4"></div>
-        </div><div class="pip" id="pip1"></div>
-          <div class="pip" id="pip2"></div><div class="pip" id="pip3"></div>
+          <div class="pip" id="pip0"></div><div class="pip" id="pip1"></div><div class="pip" id="pip2"></div><div class="pip" id="pip3"></div><div class="pip" id="pip4"></div>
         </div>
         <span class="score-badge A" id="sigscore">collecting ticks</span>
       </div>
@@ -404,7 +399,7 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
         <div class="sig-cell"><div class="sig-name">RSI (14)</div><div class="sig-val A" id="srsi">—</div><div class="sig-track"><div class="sig-bar" id="srsi-bar" style="width:50%"></div></div></div>
         <div class="sig-cell"><div class="sig-name">ATR (14)</div><div class="sig-val A" id="satr">—</div><div class="sig-track"><div class="sig-bar" id="satr-bar" style="width:50%"></div></div></div>
         <div class="sig-cell"><div class="sig-name">MACD 12/26</div><div class="sig-val A" id="smacd">—</div><div class="sig-track"><div class="sig-bar" id="smacd-bar" style="width:50%"></div></div></div>
-        <div class="sig-cell" style="grid-column: span 2;"><div class="sig-name">Mean Rev (Z-Score)</div><div class="sig-val A" id="smean">—</div><div class="sig-track"><div class="sig-bar" id="smean-bar" style="width:50%"></div></div></div>
+        <div class="sig-cell" style="grid-column:span 2;border-right:none"><div class="sig-name">Mean Rev (Z-Score)</div><div class="sig-val A" id="smean">—</div><div class="sig-track"><div class="sig-bar" id="smean-bar" style="width:50%"></div></div></div>
       </div>
     </div>
     <!-- desktop-only log embedded in chart col -->
@@ -478,10 +473,6 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
   <button class="btn btn-add" onclick="topUp()" title="Add $500 demo funds (T)">+$500<span class="kbd-hint">T</span></button>
   <button class="btn" id="bscalp" onclick="toggleScalp()" title="Toggle Scalp Mode (fast local engine)" style="background:var(--s2);color:var(--t2);border-color:var(--b2);">⚡ Scalp Mode</button>
   <div class="toolbar-st" id="fst">Select coin → Start Bot</div>
-</div>
-</div>
-</div>
-
 </div><!-- .app -->
 
 <script>
