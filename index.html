@@ -393,6 +393,8 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
           <div class="pip" id="pip0"></div><div class="pip" id="pip1"></div>
           <div class="pip" id="pip2"></div><div class="pip" id="pip3"></div><div class="pip" id="pip4"></div>
         </div><div class="pip" id="pip1"></div>
+          <div class="pip" id="pip2"></div><div class="pip" id="pip3"></div><div class="pip" id="pip4"></div>
+        </div><div class="pip" id="pip1"></div>
           <div class="pip" id="pip2"></div><div class="pip" id="pip3"></div>
         </div>
         <span class="score-badge A" id="sigscore">collecting ticks</span>
@@ -478,6 +480,7 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
   <div class="toolbar-st" id="fst">Select coin → Start Bot</div>
 </div>
 </div>
+</div>
 
 </div><!-- .app -->
 
@@ -502,6 +505,7 @@ const CFG={
   MIN_CONF:68,SELL_CONF:60
 };
 
+// ── STATE ─────────────────────────────────────────────────────────
 const S={
   running:false,sym:'BTC',price:0,prices:[],
   bal:1000,exp:0,pos:null,pnl:0,trades:0,wins:0,pnlHist:[0],
@@ -509,36 +513,29 @@ const S={
   lastLocalAction:'',posOpenedAt:0,
   tickT:null,cdT:null,localT:null,topups:0,logs:[],
   lastScores:[],smoothScore:0,
-  
-  // New State variables
-  tradeHistory: [], // stores {win: true/false, pnl: amount}
-  peakEquity: 1000,
-  circuitBreaker: false,
-  scalpMode: false
+  tradeHistory:[],   // trailing 20: {win:bool, pnl:number}
+  atrHist:[],        // trailing 50 ATR values for vol gate
+  peakEquity:1000,   // max(bal + unrealized_pnl) seen; top-ups bump this immediately
+  circuitBreaker:false,
+  scalpMode:false
 };
 
 // ── TRADINGVIEW ───────────────────────────────────────────────────
-let tvWidget=null, currentInterval='1';
+let tvWidget=null,currentInterval='1';
 
-function initTV(sym) {
+function initTV(sym){
   const container=document.getElementById('tvChart');
   container.innerHTML='';
-  if (!window.TradingView) return;
-  try {
+  if(!window.TradingView)return;
+  try{
     tvWidget=new TradingView.widget({
-      container_id:'tvChart',
-      symbol:TV_SYMBOLS[sym]||'BINANCE:BTCUSDT',
-      interval:currentInterval,
-      theme:'dark',style:'1',locale:'en',
+      container_id:'tvChart',symbol:TV_SYMBOLS[sym]||'BINANCE:BTCUSDT',
+      interval:currentInterval,theme:'dark',style:'1',locale:'en',
       toolbar_bg:'#111116',enable_publishing:false,
-      hide_top_toolbar:false,hide_legend:false,save_image:false,
-      autosize: true,
-      backgroundColor:'#09090c',
-      gridColor:'rgba(255,255,255,0.03)',
-      studies:[],
+      hide_top_toolbar:false,hide_legend:false,save_image:false,autosize:true,
+      backgroundColor:'#09090c',gridColor:'rgba(255,255,255,0.03)',studies:[],
       overrides:{
-        'paneProperties.background':'#09090c',
-        'paneProperties.backgroundType':'solid',
+        'paneProperties.background':'#09090c','paneProperties.backgroundType':'solid',
         'scalesProperties.textColor':'#50506a',
         'mainSeriesProperties.candleStyle.upColor':'#00c076',
         'mainSeriesProperties.candleStyle.downColor':'#f6465d',
@@ -550,22 +547,22 @@ function initTV(sym) {
       disabled_features:['header_symbol_search','header_compare','header_screenshot','use_localstorage_for_settings'],
       enabled_features:['hide_left_toolbar_by_default'],
     });
-  } catch(e) {
+  }catch(e){
     container.innerHTML='<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#50506a;font-size:12px;font-family:monospace">TradingView loading…</div>';
   }
 }
 
-function setInterval_(iv) {
+function setInterval_(iv){
   currentInterval=iv;
   document.querySelectorAll('.ibtn').forEach(b=>b.classList.remove('active'));
   event.target.classList.add('active');
-  if (tvWidget) { try { tvWidget.chart().setResolution(iv); } catch(_) { initTV(S.sym); } }
+  if(tvWidget){try{tvWidget.chart().setResolution(iv);}catch(_){initTV(S.sym);}}
 }
 
-function onCoinChange() {
+function onCoinChange(){
   const sym=document.getElementById('coinsel').value;
   document.getElementById('pair-name').textContent=sym+'/USDT';
-  if (!S.running) initTV(sym);
+  if(!S.running)initTV(sym);
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────
@@ -586,7 +583,7 @@ function safeParseError(raw){
   catch{return String(raw).slice(0,60);}
 }
 
-// ── LOG (writes to both desktop and mobile containers) ────────────
+// ── LOG ───────────────────────────────────────────────────────────
 function addLog(type,msg,pnl=null){
   S.logs.unshift({type,msg,pnl,t:ts()});
   if(S.logs.length>80)S.logs.pop();
@@ -595,16 +592,14 @@ function addLog(type,msg,pnl=null){
 function renderLog(){
   const html=S.logs.map(e=>{
     const p=e.pnl!=null?`<span class="log-pnl" style="color:${e.pnl>=0?'var(--g)':'var(--r)'}">${usd(e.pnl,true)}</span>`:'';
-    let tagHtml = e.type === 'ai' ? 'ai' : e.type;
-    return `<div class="log-row l${e.type}"><span class="log-time">${e.t}</span><span class="log-tag tag-${e.type}">${tagHtml}</span><span class="log-msg">${e.msg}</span>${p}</div>`;
+    return `<div class="log-row l${e.type}"><span class="log-time">${e.t}</span><span class="log-tag tag-${e.type}">${e.type}</span><span class="log-msg">${e.msg}</span>${p}</div>`;
   }).join('');
-  const dw=$('logwrap'), mw=$('logwrap-mobile');
-  if(dw) dw.innerHTML=html;
-  if(mw) mw.innerHTML=html;
+  const dw=$('logwrap'),mw=$('logwrap-mobile');
+  if(dw)dw.innerHTML=html;
+  if(mw)mw.innerHTML=html;
   const n=S.pnl;
-  const netTxt='net '+(n>=0?'+':'')+usd(n);
-  const netCol=n>0?'var(--g)':n<0?'var(--r)':'var(--t3)';
-  $('lognet').textContent=netTxt;$('lognet').style.color=netCol;
+  $('lognet').textContent='net '+(n>=0?'+':'')+usd(n);
+  $('lognet').style.color=n>0?'var(--g)':n<0?'var(--r)':'var(--t3)';
 }
 
 // ── STATS ─────────────────────────────────────────────────────────
@@ -630,26 +625,23 @@ function setStatus(type,label){
   $('llbl').textContent=label;
 }
 
+// ── SCALP MODE TOGGLE ─────────────────────────────────────────────
 function toggleScalp(){
-  if (S.pos) {
-    addLog('err', 'Cannot switch modes while a position is open.');
-    return;
-  }
-  S.scalpMode = !S.scalpMode;
-  const b = $('bscalp');
-  if (S.scalpMode) {
+  if(S.pos){addLog('err','Cannot switch modes while a position is open.');return;}
+  S.scalpMode=!S.scalpMode;
+  const b=$('bscalp');
+  if(S.scalpMode){
     b.classList.add('btn-scalp-on');
-    $('rmode').textContent = '⚡ scalp mode';
-    addLog('ai', '⚡ Scalp Mode activated (fast loop, smaller targets).');
-  } else {
+    $('rmode').textContent='⚡ scalp';
+    addLog('ai','⚡ Scalp Mode ON: 2s loop, EMA(5/13)+RSI(7) both-agree rule, AI disabled, max risk 1.5%, TP=1×ATR SL=0.5×ATR, min hold 15s. Vol gate + circuit breaker still active.');
+  }else{
     b.classList.remove('btn-scalp-on');
-    $('rmode').textContent = 'swing mode';
-    addLog('ai', 'Swing Mode activated (standard loop, AI enabled).');
+    $('rmode').textContent='swing';
+    addLog('ai','Swing Mode ON: 10s loop, 5-signal ensemble, AI on score 4/5.');
   }
-  if (S.running) {
-    // restart loops with new timings
+  if(S.running){
     clearInterval(S.localT);
-    S.localT = setInterval(localEngine, S.scalpMode ? 2000 : 10000);
+    S.localT=setInterval(localEngine,S.scalpMode?2000:10000);
   }
 }
 
@@ -670,22 +662,21 @@ function startCountdown(ms){
   },500);
 }
 
-// ── POSITION ─────────────────────────────────────────────────────
+// ── POSITION CARD ─────────────────────────────────────────────────
 function renderPos(){
   const pc=$('poscard');
   if(!S.pos){pc.style.display='none';return;}
-  const lp=(S.price-S.pos.entry)*S.pos.qty*(S.pos.side==='SELL'?-1:1);
+  const lp=r2((S.price-S.pos.entry)*S.pos.qty*(S.pos.side==='SELL'?-1:1));
   const pct=r2(lp/S.pos.size*100);
   const held=Math.floor((Date.now()-S.posOpenedAt)/1000);
-  
-  const minHold = S.scalpMode ? 15000 : 120000;
+  const minHold=S.pos.scalp?15000:120000;
   const canClose=Date.now()-S.posOpenedAt>=minHold;
   pc.style.display='block';
   pc.className='pos-card'+(S.pos.side==='SELL'?' short':'');
   pc.innerHTML=`
     <div class="pos-hd">
       <svg width="7" height="7" viewBox="0 0 8 8" fill="${lp>=0?'var(--g)':'var(--r)'}"><circle cx="4" cy="4" r="4"/></svg>
-      ${S.pos.side} ${S.pos.sym}/USDT ${S.scalpMode?'(SCALP)':''}
+      ${S.pos.side} ${S.pos.sym}/USDT${S.pos.scalp?' ⚡':''}
       <span class="hold-chip ${canClose?'hold-ok':'hold-wait'}">${canClose?'Can close':'Min hold'}</span>
     </div>
     <div class="pos-pnl" style="color:${lp>=0?'var(--g)':'var(--r)'}">${usd(lp,true)} <span style="font-size:13px;opacity:.6">(${pct>=0?'+':''}${pct.toFixed(2)}%)</span></div>
@@ -735,13 +726,12 @@ function drawPnlChart(){
   const last=h[h.length-1]||0;
   const col=last>=0?'#00c076':'#f6465d';
   if(!pnlChartInst){
-    const c=$('pnlChart');
-    pnlChartInst=new Chart(c,{
+    pnlChartInst=new Chart($('pnlChart'),{
       type:'line',
       data:{labels,datasets:[{data:h,borderColor:col,borderWidth:1.5,pointRadius:0,tension:.4,fill:{target:'origin',above:'rgba(0,192,118,.08)',below:'rgba(246,70,93,.08)'}}]},
       options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}},elements:{line:{borderCapStyle:'round'}}}
     });
-  } else {
+  }else{
     pnlChartInst.data.labels=labels;
     pnlChartInst.data.datasets[0].data=h;
     pnlChartInst.data.datasets[0].borderColor=col;
@@ -749,321 +739,291 @@ function drawPnlChart(){
   }
 }
 
-// ── INDICATORS & KELLY SIZING ─────────────────────────────────────
-function getKellySizing() {
-  let W = 0.5;
-  let R = 1.5;
-  if (S.tradeHistory.length >= 10) {
-    const wins = S.tradeHistory.filter(t => t.win).length;
-    W = wins / S.tradeHistory.length;
-    let avgWin = 0, avgLoss = 0, numWins = 0, numLoss = 0;
-    S.tradeHistory.forEach(t => {
-      if (t.win) { avgWin += t.pnl; numWins++; }
-      else { avgLoss += Math.abs(t.pnl); numLoss++; }
+// ── KELLY SIZING (GAP 1 FIXED) ────────────────────────────────────
+// Trailing W and R over last 20 closed trades.
+// Half-Kelly: risk_pct = clamp(kelly_f * 0.5, 0.5%, capMax).
+// capMax = 3% swing / 1.5% scalp.
+// SL floor: slDist = max(ATR * multiplier, price * 0.008) — prevents absurd leverage from near-zero ATR.
+// Hard notional cap: pos_size_usd <= balance * 15%.
+// When cap binds: accept trade, log shortfall explicitly.
+function getKellySizing(){
+  let W=0.5,R=1.5;
+  if(S.tradeHistory.length>=10){
+    const wins=S.tradeHistory.filter(t=>t.win).length;
+    W=wins/S.tradeHistory.length;
+    let avgWin=0,avgLoss=0,nW=0,nL=0;
+    S.tradeHistory.forEach(t=>{
+      if(t.win){avgWin+=t.pnl;nW++;}else{avgLoss+=Math.abs(t.pnl);nL++;}
     });
-    if (numWins > 0 && numLoss > 0) {
-      avgWin /= numWins;
-      avgLoss /= numLoss;
-      R = avgWin / avgLoss;
-    }
+    if(nW>0&&nL>0){avgWin/=nW;avgLoss/=nL;R=avgWin/avgLoss;}
   }
-  
-  const kelly_f = W - ((1 - W) / R);
-  const raw_risk = kelly_f * 0.5; // Half-Kelly
-  const capMax = S.scalpMode ? 0.015 : 0.03; // Scalp capped at 1.5%
-  const risk_pct = Math.min(capMax, Math.max(0.005, raw_risk));
-  return { W, R, kelly_f, risk_pct };
+  const kelly_f=W-((1-W)/R);
+  const raw=kelly_f*0.5;
+  const capMax=S.scalpMode?0.015:0.03;
+  const risk_pct=Math.min(capMax,Math.max(0.005,raw));
+  return {W,R,kelly_f,risk_pct};
 }
 
-function checkVolatilityGate(currentAtr) {
-  // Gate using last 50 ticks (or however many we have if <50)
-  if (!S.atrHist) S.atrHist = [];
-  S.atrHist.push(currentAtr);
-  if (S.atrHist.length > 50) S.atrHist.shift();
-  
-  if (S.atrHist.length < 50) return { block: false, z: 0 };
-  
-  const mean = S.atrHist.reduce((a,b)=>a+b,0) / 50;
-  const variance = S.atrHist.reduce((a,b)=>a + Math.pow(b - mean, 2), 0) / 50;
-  const std = Math.sqrt(variance) || 1;
-  const z = (currentAtr - mean) / std;
-  
-  return { block: Math.abs(z) > 2, z: z };
+// ── VOLATILITY REGIME GATE (GAP 2 FIXED: ONE-SIDED) ──────────────
+// Only blocks when atr_z > +2 (high-chaos). Negative atr_z = compression = allowed.
+// Compression is when the ATR vote fires bullish — do not contradict that.
+function checkVolGate(atr){
+  S.atrHist.push(atr);
+  if(S.atrHist.length>50)S.atrHist.shift();
+  if(S.atrHist.length<50)return{block:false,z:0};
+  const mean=S.atrHist.reduce((a,b)=>a+b,0)/50;
+  const std=Math.sqrt(S.atrHist.reduce((a,b)=>a+Math.pow(b-mean,2),0)/50)||1;
+  const z=(atr-mean)/std;
+  return{block:z>2,z}; // ONE-SIDED: only high-z blocked
 }
 
+// ── EQUITY & CIRCUIT BREAKER (GAP 3 FIXED) ───────────────────────
+// current_equity = S.bal + unrealized_pnl (floating loss visible immediately).
+// top-ups bump S.peakEquity by the same $500 simultaneously — no masking.
+// Breaker: fires at >8% DD, clears at <3% DD (hysteresis).
+function getCurrentEquity(){
+  const unrealized=S.pos?r2((S.price-S.pos.entry)*S.pos.qty*(S.pos.side==='SELL'?-1:1)):0;
+  return S.bal+unrealized;
+}
+
+function updatePeakAndBreaker(){
+  const eq=getCurrentEquity();
+  if(eq>S.peakEquity)S.peakEquity=eq;
+  const dd=(S.peakEquity-eq)/S.peakEquity;
+  const modeTag=S.scalpMode?'SCALP ':'';
+  if(dd>0.08&&!S.circuitBreaker){
+    S.circuitBreaker=true;
+    addLog('err',`Circuit breaker: drawdown ${(dd*100).toFixed(1)}%, ${modeTag}entries paused`);
+  }else if(dd<0.03&&S.circuitBreaker){
+    S.circuitBreaker=false;
+    addLog('ai',`Circuit breaker lifted: drawdown recovered to ${(dd*100).toFixed(1)}%`);
+  }
+}
+
+// ── INDICATORS ────────────────────────────────────────────────────
 function calcIndicators(){
   const px=S.prices,n=px.length;
   if(n<CFG.NEED_TICKS){$('sigscore').textContent=`${CFG.NEED_TICKS-n} ticks needed`;return null;}
+
   function ema(data,period){
     const p=Math.min(period,data.length);const k=2/(p+1);
     let e=data.slice(0,p).reduce((a,b)=>a+b,0)/p;
     for(let i=p;i<data.length;i++)e=data[i]*k+e*(1-k);return e;
   }
-  
-  // EMA
-  const e5=ema(px,5), e13=ema(px,13), e20=ema(px,20), e50=ema(px.slice(-Math.min(n,70)),Math.min(50,n));
-  const emaBull=e5>e20&&e20>e50, emaBear=e5<e20&&e20<e50;
-  
-  // RSI
+
+  // ── EMAs
+  const e5=ema(px,5),e13=ema(px,13),e20=ema(px,20),e50=ema(px.slice(-Math.min(n,70)),Math.min(50,n));
+  const emaBull=e5>e20&&e20>e50,emaBear=e5<e20&&e20<e50;
+
+  // ── RSI(14) for swing
   const rLen=Math.min(14,n-1);const gs=[],ls=[];
   for(let i=n-rLen;i<n;i++){const d=px[i]-px[i-1];d>0?gs.push(d):ls.push(Math.abs(d));}
   const ag=gs.length?gs.reduce((a,b)=>a+b,0)/gs.length:0;
   const al=ls.length?ls.reduce((a,b)=>a+b,0)/ls.length:.0001;
   const rsi=100-(100/(1+ag/al));
-  const rsiOS=rsi<38, rsiOB=rsi>65;
-  const rsiMid=!rsiOB&&rsi<55;
-  
-  // Scalp specific RSI (7 period)
+  const rsiOS=rsi<38,rsiOB=rsi>65,rsiMid=!rsiOB&&rsi<55;
+
+  // ── RSI(7) for scalp
   const rLen7=Math.min(7,n-1);const gs7=[],ls7=[];
   for(let i=n-rLen7;i<n;i++){const d=px[i]-px[i-1];d>0?gs7.push(d):ls7.push(Math.abs(d));}
   const ag7=gs7.length?gs7.reduce((a,b)=>a+b,0)/gs7.length:0;
   const al7=ls7.length?ls7.reduce((a,b)=>a+b,0)/ls7.length:.0001;
   const rsi7=100-(100/(1+ag7/al7));
 
-  // ATR
+  // ── ATR(14)
   const aLen=Math.min(14,n-1);const trs=[];
   for(let i=n-aLen;i<n;i++)trs.push(Math.abs(px[i]-px[i-1]));
   const atr=trs.reduce((a,b)=>a+b,0)/trs.length;
   const atrPct=(atr/px[n-1])*100,atrOk=atrPct<0.15;
-  
-  // MACD
+
+  // ── MACD(12,26,9)
   const macdLine=ema(px,12)-ema(px,26);
   const mSeries=[];const mStart=Math.max(26,n-20);
   for(let i=mStart;i<=n;i++){const sl=px.slice(0,i);mSeries.push(ema(sl,Math.min(12,sl.length))-ema(sl,Math.min(26,sl.length)));}
   const sigLine=mSeries.length>=9?ema(mSeries,Math.min(9,mSeries.length)):macdLine;
-  const macdBull=macdLine>sigLine&&macdLine>0, macdBear=macdLine<sigLine&&macdLine<0;
-  
-  // Z-Score Mean Reversion (20 period)
-  const s20Len = Math.min(20, n);
-  const s20Slice = px.slice(-s20Len);
-  const sma20 = s20Slice.reduce((a,b)=>a+b,0) / s20Len;
-  const var20 = s20Slice.reduce((a,b)=>a + Math.pow(b - sma20, 2), 0) / s20Len;
-  const std20 = Math.sqrt(var20) || 1;
-  const priceZ = (px[n-1] - sma20) / std20;
-  const zBull = priceZ < -1.5, zBear = priceZ > 1.5;
+  const macdBull=macdLine>sigLine&&macdLine>0,macdBear=macdLine<sigLine&&macdLine<0;
 
-  let raw = 0;
-  let lbl = '';
-  let cls = 'A';
-  let smooth = 0;
-  let scalpAction = 'WAIT';
-  
-  if (S.scalpMode) {
-    // SCALP LOGIC: Only fast EMA and RSI
-    const fastBull = e5 > e13;
-    const fastBear = e5 < e13;
-    if (fastBull && rsi7 < 60) scalpAction = 'BULL';
-    else if (fastBear && rsi7 > 40) scalpAction = 'BEAR';
-    
-    // update visuals roughly
-    smooth = scalpAction === 'BULL' ? 5 : scalpAction === 'BEAR' ? 0 : 2;
-    lbl = scalpAction;
-    cls = scalpAction === 'BULL' ? 'G' : scalpAction === 'BEAR' ? 'R' : 'A';
-    
-  } else {
-    // SWING LOGIC: 5-signal ensemble
-    raw=[emaBull,(rsiOS||rsiMid),atrOk,macdBull,zBull].filter(Boolean).length;
-    // penalty for bears
-    if (emaBear) raw = Math.max(0, raw-1);
-    if (macdBear) raw = Math.max(0, raw-1);
-    if (zBear) raw = Math.max(0, raw-1);
-    
+  // ── Mean Reversion Z-Score (20-period)
+  const s20Slice=px.slice(-Math.min(20,n));
+  const sma20=s20Slice.reduce((a,b)=>a+b,0)/s20Slice.length;
+  const std20=Math.sqrt(s20Slice.reduce((a,b)=>a+Math.pow(b-sma20,2),0)/s20Slice.length)||1;
+  const priceZ=(px[n-1]-sma20)/std20;
+  const zBull=priceZ<-1.5,zBear=priceZ>1.5;
+
+  // ── Vol gate (one-sided, blocks high-z only)
+  const volGate=checkVolGate(atr);
+
+  // ── SIGNAL SCORING ───────────────────────────────────────────────
+  let smooth=0,lbl='',cls='A',scalpAction='WAIT';
+
+  if(S.scalpMode){
+    // GAP 4 FIXED: Scalp uses EMA(5/13) cross + RSI(7).
+    // Entry: BOTH EMA5>EMA13 AND RSI7<60 must be true simultaneously.
+    // Exit:  BOTH EMA5<EMA13 AND RSI7>40 must be true simultaneously.
+    // Disagreement = WAIT. Neither signal alone is sufficient.
+    const fastBull=e5>e13&&rsi7<60;
+    const fastBear=e5<e13&&rsi7>40;
+    if(fastBull)scalpAction='BULL';
+    else if(fastBear)scalpAction='BEAR';
+    smooth=scalpAction==='BULL'?5:scalpAction==='BEAR'?0:2;
+    lbl=scalpAction;
+    cls=scalpAction==='BULL'?'G':scalpAction==='BEAR'?'R':'A';
+  }else{
+    // 5-signal swing ensemble
+    let raw=[emaBull,(rsiOS||rsiMid),atrOk,macdBull,zBull].filter(Boolean).length;
+    if(emaBear)raw=Math.max(0,raw-1);
+    if(macdBear)raw=Math.max(0,raw-1);
+    if(zBear)raw=Math.max(0,raw-1);
     S.lastScores.push(raw);if(S.lastScores.length>3)S.lastScores.shift();
     smooth=Math.round(S.lastScores.reduce((a,b)=>a+b,0)/S.lastScores.length);
     S.smoothScore=smooth;
     lbl=smooth>=4?'Bullish':smooth<=1?'Bearish':'Neutral';
     cls=smooth>=4?'G':smooth<=1?'R':'A';
   }
-  
-  // Volatility Gate
-  const volGate = checkVolatilityGate(atr);
 
+  // ── UPDATE UI ─────────────────────────────────────────────────────
   function ss(id,barId,val,pct,bull,bear){
     const el=$(id);if(!el)return;
-    el.textContent=val;
-    el.className='sig-val '+(bull?'G':bear?'R':'A');
+    el.textContent=val;el.className='sig-val '+(bull?'G':bear?'R':'A');
     const bar=$(barId);if(!bar)return;
-    bar.style.width=pct+'%';
-    bar.style.background=bull?'var(--g)':bear?'var(--r)':'var(--a)';
+    bar.style.width=pct+'%';bar.style.background=bull?'var(--g)':bear?'var(--r)':'var(--a)';
   }
   ss('sema','sema-bar',emaBull?'Triple bull':emaBear?'Triple bear':'Mixed',emaBull?85:emaBear?15:50,emaBull,emaBear);
   ss('srsi','srsi-bar','RSI '+rsi.toFixed(0)+(rsiOS?' OS':rsiOB?' OB':''),Math.min(100,rsi),rsiOS,rsiOB);
   ss('satr','satr-bar','ATR '+atrPct.toFixed(3)+'%',atrOk?80:30,atrOk,!atrOk);
   ss('smacd','smacd-bar',macdBull?'Bull cross':macdBear?'Bear cross':'Flat',macdBull?80:macdBear?20:50,macdBull,macdBear);
-  ss('smean','smean-bar','Z-Score ' + priceZ.toFixed(2), priceZ < -1.5 ? 80 : priceZ > 1.5 ? 20 : 50, zBull, zBear);
-
-  for(let i=0;i<5;i++){const pip=$('pip'+i);if(pip)pip.className='pip'+(i<smooth?' G':' R');}
-  
-  $('sigscore').textContent = S.scalpMode ? `SCALP · ${lbl}` : `${smooth}/5 · ${lbl}`;
+  ss('smean','smean-bar','Z='+priceZ.toFixed(2),priceZ<-1.5?80:priceZ>1.5?20:50,zBull,zBear);
+  for(let i=0;i<5;i++){const p=$('pip'+i);if(p)p.className='pip'+(i<smooth?' G':' R');}
+  $('sigscore').textContent=S.scalpMode?`SCALP · ${lbl}`:`${smooth}/5 · ${lbl}`;
   $('sigscore').className='score-badge '+cls;
-  $('clbl').textContent=`${S.sym}/USDT · ${n} ticks · ${S.scalpMode ? 'Scalp' : 'Score '+smooth+'/5'}`;
-  
-  // Risk & Sizing calculation
-  const kellyParams = getKellySizing();
-  let slDist, tpDist;
-  
-  if (S.scalpMode) {
-    // SCALP: TP = 1x ATR, SL = 0.5x ATR
-    slDist = Math.max(atr * 0.5, S.price * 0.002);
-    tpDist = slDist * 2; // Math logic equivalent
-  } else {
-    // SWING: TP = 3x ATR, SL = 1.5x ATR
-    slDist = Math.max(atr * 1.5, S.price * 0.008);
-    tpDist = slDist * 2;
-  }
-  
+  $('clbl').textContent=`${S.sym}/USDT · ${n} ticks · ${S.scalpMode?'Scalp':'Score '+smooth+'/5'}`;
+
+  // ── POSITION SIZING (GAP 1: SL floor restored, cap shortfall logged) ─
+  const kp=getKellySizing();
+  const atrMult=S.scalpMode?0.5:1.5;
+  const priceFloor=S.price*0.008;  // 0.8% minimum stop distance
+  const slDist=Math.max(atr*atrMult,priceFloor);  // FLOOR RESTORED
+  const tpDist=slDist*2;  // R:R always 2:1 regardless of mode
   const slPct=r2((slDist/S.price)*100);
   const tpPct=r2((tpDist/S.price)*100);
-  
-  // position_size = risk_amount / slPct (expressed as decimal)
-  // Which is equal to risk_amount / (slDist / price) = (balance * riskPct * price) / slDist
-  const riskAmount = S.bal * kellyParams.risk_pct;
-  const rawPosSizeUsd = (riskAmount / slDist) * S.price;
-  
-  // Absolute Hard Cap: 15% of balance
-  let finalPosSizeUsd = rawPosSizeUsd;
-  let isCapped = false;
-  const hardCap = S.bal * 0.15;
-  if (rawPosSizeUsd > hardCap) {
-    finalPosSizeUsd = hardCap;
-    isCapped = true;
-  }
+  const riskAmount=r2(S.bal*kp.risk_pct);
+  const rawPosSizeUsd=r2((riskAmount/slDist)*S.price);
+  const hardCap=r2(S.bal*0.15);
+  const isCapped=rawPosSizeUsd>hardCap;
+  const posSizeUsd=isCapped?hardCap:rawPosSizeUsd;
 
-  return {
-    e5,e20,e50,rsi,rsiOS,rsiOB,atr,atrPct,atrOk,macdLine,sigLine,macdBull,macdBear,
-    smooth,slPct,tpPct, 
-    posSizeUsd: r2(finalPosSizeUsd),
-    kellyParams, isCapped, volGate,
-    scalpAction
+  return{
+    e5,e13,e20,e50,rsi,rsi7,rsiOS,rsiOB,atr,atrPct,atrOk,
+    macdLine,sigLine,macdBull,macdBear,priceZ,zBull,zBear,
+    smooth,slPct,tpPct,posSizeUsd,riskAmount,kp,isCapped,volGate,scalpAction
   };
 }
 
-// ── AUTO CLOSE ───────────────────────────────────────────────────
+// ── AUTO CLOSE (TP/SL hits) ───────────────────────────────────────
 function autoClose(){
   if(!S.pos||!S.price)return;
-  const lp=(S.price-S.pos.entry)*S.pos.qty*(S.pos.side==='SELL'?-1:1);
+  const lp=r2((S.price-S.pos.entry)*S.pos.qty*(S.pos.side==='SELL'?-1:1));
   const pct=lp/S.pos.size*100;
   if(pct>=S.pos.tp||pct<=-S.pos.sl){
-    const fp=r2(lp);
+    const fp=lp;
     S.pnl=r2(S.pnl+fp);S.bal=r2(S.bal+S.pos.size+fp);
     S.exp=Math.max(0,r2(S.exp-S.pos.size));
     S.trades++;if(fp>0)S.wins++;S.pnlHist.push(S.pnl);
-    
-    // Record for Kelly
-    S.tradeHistory.push({win: fp > 0, pnl: fp});
-    if (S.tradeHistory.length > 20) S.tradeHistory.shift();
-    
-    const mTag = S.pos.scalp ? 'SCALP ' : '';
-    addLog('sell',`Auto-close ${mTag}${S.pos.side} ${S.pos.sym} @ ${usd(S.price)} · ${pct>=S.pos.tp?'TP +'+S.pos.tp+'% ✓':'SL -'+S.pos.sl+'% ✗'}`,fp);
+    S.tradeHistory.push({win:fp>0,pnl:fp});
+    if(S.tradeHistory.length>20)S.tradeHistory.shift();
+    const tag=S.pos.scalp?'SCALP ':'';
+    addLog('sell',`Auto-close ${tag}${S.pos.side} ${S.pos.sym} @ ${usd(S.price)} · ${pct>=S.pos.tp?'TP ✓':'SL ✗'}`,fp);
     S.pos=null;S.posOpenedAt=0;$('poscard').style.display='none';
-    
-    updatePeakEquity();
+    // update peak after close (bal changed)
+    updatePeakAndBreaker();
   }
 }
 
-function updatePeakEquity() {
-  const currentEquity = S.bal + (S.pos ? ((S.price - S.pos.entry) * S.pos.qty * (S.pos.side==='SELL'?-1:1)) : 0);
-  if (currentEquity > S.peakEquity) S.peakEquity = currentEquity;
-  
-  const dd = (S.peakEquity - currentEquity) / S.peakEquity;
-  if (dd > 0.08 && !S.circuitBreaker) {
-    S.circuitBreaker = true;
-    addLog('err', `Circuit breaker: drawdown ${(dd*100).toFixed(1)}%, entries paused`);
-  } else if (dd < 0.03 && S.circuitBreaker) {
-    S.circuitBreaker = false;
-    addLog('ai', `Circuit breaker lifted: drawdown recovered to ${(dd*100).toFixed(1)}%`);
-  }
+// ── OPEN POSITION HELPER ──────────────────────────────────────────
+function openPosition(ind,tag){
+  const free=r2(S.bal-S.exp);
+  const actualSize=Math.min(ind.posSizeUsd,free);
+  if(actualSize<1){addLog('hold','Insufficient free margin for entry.');return;}
+  const qty=parseFloat((actualSize/S.price).toFixed(8));
+  S.exp=r2(S.exp+actualSize);S.posOpenedAt=Date.now();
+  S.pos={sym:S.sym,side:'BUY',entry:S.price,qty,size:actualSize,tp:ind.tpPct,sl:ind.slPct,scalp:S.scalpMode};
+  const {W,R,kelly_f,risk_pct}=ind.kp;
+  const capNote=ind.isCapped?` (15% CAP)`:' ';
+  const actualRisk=r2(actualSize*ind.slPct/100);
+  const shortfallNote=ind.isCapped?` | target risk ${usd(ind.riskAmount)} → actual risk ${usd(actualRisk)} (shortfall logged)`:'';
+  addLog('buy',`${tag} W:${W.toFixed(2)} R:${R.toFixed(2)} KellyF:${kelly_f.toFixed(3)} risk_pct:${(risk_pct*100).toFixed(1)}%`);
+  addLog('buy',`${S.sym} @ ${usd(S.price)} · size ${usd(actualSize)}${capNote}· TP+${ind.tpPct}% SL-${ind.slPct}%${shortfallNote}`);
+  if(ind.isCapped)addLog('err',`SIZING WARN: target risk ${usd(ind.riskAmount)} capped to actual risk ${usd(actualRisk)} — under-risking by ${r2(ind.riskAmount/actualRisk)}×`);
+  $('rsig').textContent='BUY';$('rsig').className='ai-action G';
+  renderStats();renderPos();
 }
 
-// ── LOCAL ENGINE ─────────────────────────────────────────────────
+// ── CLOSE POSITION HELPER ─────────────────────────────────────────
+function closePosition(reason,tag){
+  const fp=r2((S.price-S.pos.entry)*S.pos.qty*(S.pos.side==='SELL'?-1:1));
+  S.pnl=r2(S.pnl+fp);S.bal=r2(S.bal+S.pos.size+fp);
+  S.exp=Math.max(0,r2(S.exp-S.pos.size));
+  S.trades++;if(fp>0)S.wins++;S.pnlHist.push(S.pnl);
+  S.tradeHistory.push({win:fp>0,pnl:fp});
+  if(S.tradeHistory.length>20)S.tradeHistory.shift();
+  addLog('sell',`${tag} ${S.pos.sym} @ ${usd(S.price)} · ${reason}`,fp);
+  S.pos=null;S.posOpenedAt=0;$('poscard').style.display='none';
+  $('rsig').textContent='SELL';$('rsig').className='ai-action R';
+  renderStats();
+  updatePeakAndBreaker();
+}
+
+// ── LOCAL ENGINE ──────────────────────────────────────────────────
 function localEngine(){
   if(!S.running)return;
   const ind=calcIndicators();if(!ind)return;
-  
-  updatePeakEquity();
-  
-  const minHold = S.scalpMode ? 15000 : 120000;
-  const canClose=S.pos?(Date.now()-S.posOpenedAt>=minHold):false;
+  updatePeakAndBreaker();
+  const minHold=S.scalpMode?15000:120000;
+  const canClose=S.pos&&(Date.now()-S.posOpenedAt>=minHold);
   const heldSecs=S.pos?Math.floor((Date.now()-S.posOpenedAt)/1000):0;
 
-  // Check Exits first
-  if (S.pos && canClose) {
-    const exitSwing = !S.scalpMode && ind.smooth <= 0;
-    const exitScalp = S.scalpMode && ind.scalpAction === 'BEAR';
-    
-    if (exitSwing || exitScalp) {
-      const fp=r2((S.price-S.pos.entry)*S.pos.qty*(S.pos.side==='SELL'?-1:1));
-      S.pnl=r2(S.pnl+fp);S.bal=r2(S.bal+S.pos.size+fp);
-      S.exp=Math.max(0,r2(S.exp-S.pos.size));
-      S.trades++;if(fp>0)S.wins++;S.pnlHist.push(S.pnl);
-      S.tradeHistory.push({win: fp > 0, pnl: fp});
-      if (S.tradeHistory.length > 20) S.tradeHistory.shift();
-      
-      const mTag = S.pos.scalp ? 'SCALP ' : '';
-      const scTag = S.scalpMode ? 'FAST BEAR' : 'score 0/5';
-      addLog('sell',`LOCAL SELL ${mTag}· ${scTag} · ${S.pos.sym} @ ${usd(S.price)}`,fp);
-      $('rsig').textContent='SELL';$('rsig').className='ai-action R';
+  // ── EXITS first (never blocked by circuit breaker or vol gate)
+  if(S.pos&&canClose){
+    const exitSwing=!S.scalpMode&&ind.smooth<=0;
+    const exitScalp=S.scalpMode&&ind.scalpAction==='BEAR';
+    if(exitSwing||exitScalp){
+      closePosition(S.scalpMode?'SCALP BEAR signal':'score 0/5',S.scalpMode?'LOCAL SELL ⚡':'LOCAL SELL');
       $('rmode').textContent=`local · ${S.scalpMode?'scalp':'0/5'}`;
-      S.pos=null;S.posOpenedAt=0;$('poscard').style.display='none';
-      renderStats();return;
-    }
-  }
-
-  // AI Call evaluation (Swing mode only)
-  const wantAI = !S.scalpMode && ((ind.smooth===4&&!S.pos)||(S.pos&&canClose&&ind.smooth<=1));
-  if(wantAI&&!S.aiBusy&&!S.aiBlocked){
-    $('rmode').textContent='claude AI';
-    runAI(ind,canClose,heldSecs);
-    return;
-  }
-
-  // Check Entries
-  if(!S.pos){
-    const entrySwing = !S.scalpMode && ind.smooth >= 5;
-    const entryScalp = S.scalpMode && ind.scalpAction === 'BULL';
-    
-    if (entrySwing || entryScalp) {
-      if (S.circuitBreaker) {
-         addLog('err', 'Circuit breaker active: entry skipped.');
-         return;
-      }
-      if (ind.volGate.block) {
-         addLog('hold', `Regime filter: ATR z=${ind.volGate.z.toFixed(2)}, skipping entry.`);
-         return;
-      }
-      
-      const free=r2(S.bal-S.exp);
-      const actualSize=Math.min(ind.posSizeUsd, free);
-      
-      if(actualSize>=1){
-        const qty=parseFloat((actualSize/S.price).toFixed(8));
-        S.exp=r2(S.exp+actualSize);S.posOpenedAt=Date.now();
-        S.pos={sym:S.sym,side:'BUY',entry:S.price,qty,size:actualSize,tp:ind.tpPct,sl:ind.slPct,scalp:S.scalpMode};
-        
-        const kp = ind.kellyParams;
-        const clampText = ind.isCapped ? ' (15% CAP)' : '';
-        addLog('buy',`${S.scalpMode?'SCALP BUY':'LOCAL BUY'} · W:${kp.W.toFixed(2)} R:${kp.R.toFixed(2)} KellyF:${kp.kelly_f.toFixed(3)} RiskPct:${(kp.risk_pct*100).toFixed(1)}%`);
-        addLog('buy',`${S.sym} @ ${usd(S.price)} · size ${usd(actualSize)}${clampText} · TP+${ind.tpPct}% SL-${ind.slPct}%`);
-        $('rsig').textContent='BUY';$('rsig').className='ai-action G';
-        $('rmode').textContent=`local · ${S.scalpMode?'scalp':'5/5'}`;
-        renderStats();renderPos();
-      }
       return;
     }
   }
 
-  // Hold State
-  if(!wantAI){
-    let action = 'WAIT';
-    if (!S.scalpMode) {
-      action = ind.smooth>=4?'BULL':ind.smooth<=1?'BEAR':'WAIT';
+  // ── AI call gate (swing only, score 4/5)
+  const wantAI=!S.scalpMode&&((ind.smooth===4&&!S.pos)||(S.pos&&canClose&&ind.smooth===1));
+  if(wantAI&&!S.aiBusy&&!S.aiBlocked){
+    $('rmode').textContent='claude AI';
+    runAI(ind,canClose,heldSecs);return;
+  }
+
+  // ── ENTRIES
+  if(!S.pos){
+    const entrySwing=!S.scalpMode&&ind.smooth>=5;
+    // Scalp: BOTH EMA5>EMA13 AND RSI7<60 required (GAP 4)
+    const entryScalp=S.scalpMode&&ind.scalpAction==='BULL';
+    if(entrySwing||entryScalp){
+      // Circuit breaker applies to BOTH modes (GAP 5)
+      if(S.circuitBreaker){addLog('err',`Circuit breaker active: ${S.scalpMode?'SCALP ':''}entry skipped.`);return;}
+      // Vol gate: one-sided, applies to BOTH modes (GAP 5)
+      if(ind.volGate.block){addLog('hold',`Regime filter: HIGH-VOL ATR z=+${ind.volGate.z.toFixed(2)}, skipping ${S.scalpMode?'scalp ':''}entry.`);return;}
+      openPosition(ind,S.scalpMode?'SCALP BUY ⚡':'LOCAL BUY');
+      $('rmode').textContent=`local · ${S.scalpMode?'scalp':'5/5'}`;
+      return;
     }
+  }
+
+  // ── HOLD
+  if(!wantAI){
+    const action=S.scalpMode?(ind.scalpAction==='BULL'?'BULL':ind.scalpAction==='BEAR'?'BEAR':'WAIT'):(ind.smooth>=4?'BULL':ind.smooth<=1?'BEAR':'WAIT');
     $('rsig').textContent=action;$('rsig').className='ai-action A';
     $('rmode').textContent=`local · ${S.scalpMode?'scalp':ind.smooth+'/5'}`;
     if(action!==S.lastLocalAction){
       S.lastLocalAction=action;
-      const why = S.scalpMode ? 'Scalp waiting for setup' : `score ${ind.smooth}/5`;
-      addLog('hold',`Local HOLD · ${why}`);
+      addLog('hold',`Local HOLD · ${S.scalpMode?'scalp: '+ind.scalpAction:'score '+ind.smooth+'/5'}`);
     }
   }
 }
@@ -1078,7 +1038,23 @@ async function runAI(ind,canClose,heldSecs){
   setStatus('on','AI');
   $('fst').innerHTML='<span class="spin"></span>Claude confirming signal…';
   addLog('ai',`Claude called · score ${ind.smooth}/5 · ${S.price.toFixed(2)}`);
-  const prompt=`Quant paper trader. Score ${ind.smooth}/5 ambiguous signal needs your call.\n\n${S.sym}/USDT:\nEMA(5/20/50): ${ind.e5.toFixed(2)}/${ind.e20.toFixed(2)}/${ind.e50.toFixed(2)} → ${ind.emaBull?'BULL':ind.emaBear?'BEAR':'MIXED'}\nRSI(14): ${ind.rsi.toFixed(1)} ${ind.rsiOS?'OVERSOLD':ind.rsiOB?'OVERBOUGHT':'NEUTRAL'}\nATR: ${ind.atrPct.toFixed(3)}% ${ind.atrOk?'LOW-VOL':'HIGH-VOL'}\nMACD: ${ind.macdBull?'BULL CROSS':ind.macdBear?'BEAR CROSS':'FLAT'}\nPrice: ${S.price.toFixed(2)}\n\nPortfolio: Bal=${S.bal.toFixed(2)} Free=${(S.bal-S.exp).toFixed(2)}\nPosition: ${S.pos?`${S.pos.side}@${S.pos.entry.toFixed(2)} held=${heldSecs}s canClose=${canClose}`:'NONE'}\nATR levels: TP=+${ind.tpPct}% SL=-${ind.slPct}% Size=${safeSize.toFixed(2)}\n\nBUY if conf≥68 and no position. SELL if position and canClose=${canClose} and conf≥60. Else HOLD.\n\nJSON only: {"action":"HOLD","confidence":72,"reason":"6 words","strategy":"trend","tp":${ind.tpPct},"sl":${ind.slPct}}`;
+  const prompt=`Quant paper trader. Score ${ind.smooth}/5 ambiguous signal.
+
+${S.sym}/USDT:
+EMA(5/20/50): ${ind.e5.toFixed(2)}/${ind.e20.toFixed(2)}/${ind.e50.toFixed(2)} → ${ind.emaBull?'BULL':ind.emaBear?'BEAR':'MIXED'}
+RSI(14): ${ind.rsi.toFixed(1)} ${ind.rsiOS?'OVERSOLD':ind.rsiOB?'OVERBOUGHT':'NEUTRAL'}
+ATR: ${ind.atrPct.toFixed(3)}% ${ind.atrOk?'LOW-VOL':'HIGH-VOL'}
+MACD: ${ind.macdBull?'BULL CROSS':ind.macdBear?'BEAR CROSS':'FLAT'}
+Price Z-score (20p): ${ind.priceZ.toFixed(2)}
+Price: ${S.price.toFixed(2)}
+
+Portfolio: Bal=${S.bal.toFixed(2)} Free=${(S.bal-S.exp).toFixed(2)}
+Position: ${S.pos?`${S.pos.side}@${S.pos.entry.toFixed(2)} held=${heldSecs}s canClose=${canClose}`:'NONE'}
+TP=+${ind.tpPct}% SL=-${ind.slPct}% Size=${safeSize.toFixed(2)}
+
+BUY if conf≥68 and no position. SELL if position and canClose=${canClose} and conf≥60. Else HOLD.
+
+JSON only: {"action":"HOLD","confidence":72,"reason":"6 words max","strategy":"trend","tp":${ind.tpPct},"sl":${ind.slPct}}`;
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -1096,7 +1072,7 @@ async function runAI(ind,canClose,heldSecs){
     }
     let data;try{data=JSON.parse(bodyText);}catch(_){throw new Error('JSON parse failed');}
     if(data.error){
-      const t=data.error.type||'';const m=data.error.message||t;
+      const t=data.error.type||'',m=data.error.message||t;
       if(t.includes('rate_limit')){S.aiRetry++;const iv=Math.min(CFG.AI_MAX_INTERVAL,CFG.AI_BASE*Math.pow(2,S.aiRetry));addLog('err',`Rate limited (#${S.aiRetry}) · backoff ${iv/1000}s`);setStatus('wait','RL');startCountdown(iv);}
       else{addLog('err',`API: ${m.slice(0,50)}`);setStatus('err','Err');startCountdown(CFG.AI_BASE);}
       $('rsig').textContent='Error';$('rsig').className='ai-action R';return;
@@ -1117,43 +1093,27 @@ async function runAI(ind,canClose,heldSecs){
     $('mfill').style.width=conf+'%';$('mfill').style.background=conf>=CFG.MIN_CONF?'var(--g)':conf>=55?'var(--a)':'var(--r)';
     addLog('ai',`${action} · ${conf}% · "${reason}"`);
     if(action==='BUY'&&!S.pos&&conf>=CFG.MIN_CONF&&ind.smooth>=4){
-      
-      if (S.circuitBreaker) { addLog('err', 'Circuit breaker active: AI entry skipped.'); return; }
-      if (ind.volGate.block) { addLog('hold', `Regime filter: ATR z=${ind.volGate.z.toFixed(2)}, skipping AI entry.`); return; }
-
-      const free=r2(S.bal-S.exp);const actual=Math.min(safeSize,free);
-      if(actual>=1){
-        const qty=parseFloat((actual/S.price).toFixed(8));S.exp=r2(S.exp+actual);S.posOpenedAt=Date.now();S.pos={sym:S.sym,side:'BUY',entry:S.price,qty,size:actual,tp,sl,scalp:false};
-        
-        const kp = ind.kellyParams;
-        const clampText = ind.isCapped ? ' (15% CAP)' : '';
-        addLog('buy',`AI BUY · W:${kp.W.toFixed(2)} R:${kp.R.toFixed(2)} KellyF:${kp.kelly_f.toFixed(3)}`);
-        addLog('buy',`${S.sym} @ ${usd(S.price)} · size ${usd(actual)}${clampText} · TP+${tp}% SL-${sl}%`);
-      }
-    } else if(action==='SELL'&&S.pos&&conf>=CFG.SELL_CONF&&canClose){
-      const fp=r2((S.price-S.pos.entry)*S.pos.qty*(S.pos.side==='SELL'?-1:1));
-      S.pnl=r2(S.pnl+fp);S.bal=r2(S.bal+S.pos.size+fp);S.exp=Math.max(0,r2(S.exp-S.pos.size));
-      S.trades++;if(fp>0)S.wins++;S.pnlHist.push(S.pnl);
-      S.tradeHistory.push({win: fp > 0, pnl: fp});
-      if (S.tradeHistory.length > 20) S.tradeHistory.shift();
-      addLog('sell',`AI SELL · ${S.pos.sym} @ ${usd(S.price)} · "${reason}"`,fp);
-      S.pos=null;S.posOpenedAt=0;$('poscard').style.display='none';
-    } else {
+      if(S.circuitBreaker){addLog('err','Circuit breaker: AI entry skipped.');return;}
+      if(ind.volGate.block){addLog('hold',`Regime filter: HIGH-VOL ATR z=+${ind.volGate.z.toFixed(2)}, skipping AI entry.`);return;}
+      const indOverride={...ind,tpPct:tp,slPct:sl};
+      openPosition(indOverride,'AI BUY');
+    }else if(action==='SELL'&&S.pos&&conf>=CFG.SELL_CONF&&canClose){
+      closePosition(`AI "${reason}"`,`AI SELL`);
+    }else{
       let why=`Hold · "${reason}"`;
-      if(action==='BUY'&&ind.smooth<4)why=`Hold · score ${ind.smooth}/5`;
-      if(action==='BUY'&&conf<CFG.MIN_CONF)why=`Hold · conf ${conf}% < ${CFG.MIN_CONF}%`;
-      if(action==='BUY'&&S.pos)why='Hold · position open';
+      if(action==='BUY'&&ind.smooth<4)why=`Hold · score ${ind.smooth}/5 <4`;
+      if(action==='BUY'&&conf<CFG.MIN_CONF)why=`Hold · conf ${conf}% <${CFG.MIN_CONF}%`;
+      if(action==='BUY'&&S.pos)why='Hold · position already open';
       if(action==='SELL'&&!S.pos)why='Hold · no position';
       if(action==='SELL'&&!canClose)why=`Hold · min hold (${fmtSecs(Math.max(0,120-heldSecs))} left)`;
       addLog('hold',why);
     }
-    renderStats();renderPos();
     $('fst').textContent=`Claude: ${action} ${conf}% · next ${CFG.AI_BASE/1000}s`;
     startCountdown(CFG.AI_BASE);
-  } catch(err){
+  }catch(err){
     addLog('err','Fetch: '+String(err.message||err).slice(0,60));
     setStatus('err','Err');startCountdown(CFG.AI_BASE);
-  } finally{
+  }finally{
     $('aifill').classList.remove('on');S.aiBusy=false;
   }
 }
@@ -1178,7 +1138,7 @@ function tick(){
   calcIndicators();renderPos();renderOB();renderVol();autoClose();renderStats();
 }
 
-// ── BOT CONTROLS ─────────────────────────────────────────────────
+// ── BOT CONTROLS ──────────────────────────────────────────────────
 function startBot(){
   S.sym=$('coinsel').value;
   S.price=SEEDS[S.sym]*(0.995+Math.random()*.01);
@@ -1190,14 +1150,14 @@ function startBot(){
   setStatus('on','Live');
   initTV(S.sym);
   addLog('ai',`Bot started · ${S.sym}/USDT · balance ${usd(S.bal)}`);
-  if (S.scalpMode) {
-     addLog('ai', '⚡ SCALP MODE ACTIVE: fast engine, tighter stops, local only.');
-  } else {
-     addLog('ai', 'SWING MODE ACTIVE: 5-signal ensemble, AI confirms mid-scores.');
+  if(S.scalpMode){
+    addLog('ai','⚡ SCALP MODE: 2s loop · EMA(5/13)+RSI(7) both-agree · AI disabled · max 1.5% risk · TP=1×ATR SL=0.5×ATR · 15s min hold · Vol gate+circuit breaker active');
+  }else{
+    addLog('ai','SWING MODE: 10s loop · 5-signal (EMA/RSI/ATR/MACD/Z-score) · AI on score 4/5 · max 3% risk · TP=2×SL · 120s min hold');
   }
   tick();
   S.tickT=setInterval(tick,2000);
-  S.localT=setInterval(localEngine, S.scalpMode ? 2000 : 10000);
+  S.localT=setInterval(localEngine,S.scalpMode?2000:10000);
 }
 
 function stopBot(){
@@ -1215,31 +1175,35 @@ function stopBot(){
 }
 
 function topUp(){
-  S.bal=r2(S.bal+500);S.topups++;
+  // GAP 3: top-up bumps peakEquity by the SAME amount simultaneously.
+  // This prevents a $500 injection from masking an existing drawdown.
+  const amount=500;
+  S.bal=r2(S.bal+amount);
+  S.peakEquity=r2(S.peakEquity+amount); // CRITICAL: must move in lockstep
+  S.topups++;
   renderStats();
-  addLog('ai',`Top-up #${S.topups} · +$500 demo · balance ${usd(S.bal)}`);
-  $('fst').textContent=`+$500 demo · balance ${usd(S.bal)}`;
+  addLog('ai',`Top-up #${S.topups} · +${usd(amount)} demo · balance ${usd(S.bal)} · peak_equity now ${usd(S.peakEquity)}`);
+  $('fst').textContent=`+${usd(amount)} demo · balance ${usd(S.bal)}`;
 }
 
-// ── DESKTOP KEYBOARD SHORTCUTS ────────────────────────────────────
+// ── KEYBOARD SHORTCUTS ────────────────────────────────────────────
 document.addEventListener('keydown',(e)=>{
   const tag=(e.target.tagName||'').toLowerCase();
   if(tag==='select'||tag==='input'||tag==='textarea')return;
-  if(e.key==='s'||e.key==='S'){ if(!$('bstart').disabled) startBot(); }
-  else if(e.key==='x'||e.key==='X'){ if(!$('bstop').disabled) stopBot(); }
-  else if(e.key==='t'||e.key==='T'){ topUp(); }
+  if(e.key==='s'||e.key==='S'){if(!$('bstart').disabled)startBot();}
+  else if(e.key==='x'||e.key==='X'){if(!$('bstop').disabled)stopBot();}
+  else if(e.key==='t'||e.key==='T'){topUp();}
   else if(e.key>='1'&&e.key<='6'){
-    const map={'1':'1','2':'5','3':'15','4':'60','5':'240','6':'D'};
     const btns=document.querySelectorAll('.ibtn');
     const idx=parseInt(e.key,10)-1;
-    if(btns[idx]) btns[idx].click();
+    if(btns[idx])btns[idx].click();
   }
 });
 
-// ── INIT ─────────────────────────────────────────────────────────
+// ── INIT ──────────────────────────────────────────────────────────
 initTV('BTC');
-addLog('ai','QuantAI v14 · Kelly-lite Sizing · 5-Signal Ensemble · Circuit Breaker');
-addLog('ai','Score 5/5→local BUY · 4/5→Claude AI BUY · 0/5→local SELL');
+addLog('ai','QuantAI v14 · Kelly-lite · Vol Gate (one-sided) · 5-Signal · Drawdown Breaker · Scalp Mode');
+addLog('ai','Swing: 5/5→local BUY · 4/5→Claude AI · 0/5→local SELL | Scalp: EMA(5/13)+RSI(7) both-agree');
 renderStats();
 renderOB();
 renderVol();
