@@ -622,8 +622,12 @@ const CFG = {
   AI_MAX_INTERVAL: 600000,
   AI_BASE: 120000,
   MIN_CONF: 68,
-  SELL_CONF: 60
+  SELL_CONF: 60,
+  MIN_HOLD_SWING: 90000, // Single source of truth for Swing min hold (90s)
+  MIN_HOLD_SCALP: 8000   // Single source of truth for Scalp min hold (8s)
 };
+
+const getMinHoldMs = (isScalp) => isScalp ? CFG.MIN_HOLD_SCALP : CFG.MIN_HOLD_SWING;
 
 // ── STATE ─────────────────────────────────────────────────────────
 const S = {
@@ -750,6 +754,20 @@ function safeParseError(raw){
   catch{ return String(raw).slice(0, 60); }
 }
 
+// Clean fetch with AbortController to prevent dangling setTimeout handlers
+async function fetchWithTimeout(url, timeoutMs = 3000){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch(err){
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
 // ── LOG ───────────────────────────────────────────────────────────
 function addLog(type, msg, pnl = null){
   S.logs.unshift({ type, msg, pnl, t: ts() });
@@ -828,14 +846,14 @@ function startCountdown(ms){
   }, 500);
 }
 
-// ── POSITION CARD (BUG 1 FIXED: DYNAMIC HOLD COUNTDOWN) ───────────
+// ── POSITION CARD (SYNCHRONIZED WITH getMinHoldMs) ────────────────
 function renderPos(){
   const pc = $('poscard');
   if(!S.pos){ pc.style.display = 'none'; return; }
   const lp = r2((S.price - S.pos.entry) * S.pos.qty * (S.pos.side === 'SELL' ? -1 : 1));
   const pct = r2(lp / S.pos.size * 100);
   const held = Math.floor((Date.now() - S.posOpenedAt) / 1000);
-  const minHold = S.pos.scalp ? 8000 : 90000;
+  const minHold = getMinHoldMs(S.pos.scalp);
   const remainingMs = Math.max(0, minHold - (Date.now() - S.posOpenedAt));
   const remainingSecs = Math.ceil(remainingMs / 1000);
   const canClose = remainingSecs <= 0;
@@ -990,7 +1008,7 @@ function updatePeakAndBreaker(){
   }
 }
 
-// ── REAL MARKET DATA FETCHING (BINANCE SPOT) ──────────────────────
+// ── REAL MARKET DATA FETCHING (CLEAN TIMEOUTS WITH ABORTCONTROLLER) ─
 let isFetchingPrice = false;
 let lastFeedErrorLogged = false;
 
@@ -1004,10 +1022,7 @@ async function fetchLivePrice(sym){
   let fetchedPrice = null;
   
   try {
-    const res = await Promise.race([
-      fetch(url1),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
-    ]);
+    const res = await fetchWithTimeout(url1, 2500);
     if(res.ok){
       const data = await res.json();
       fetchedPrice = parseFloat(data.price);
@@ -1016,7 +1031,7 @@ async function fetchLivePrice(sym){
     }
   } catch(e1){
     try {
-      const res2 = await fetch(url2);
+      const res2 = await fetchWithTimeout(url2, 2500);
       if(res2.ok){
         const data2 = await res2.json();
         fetchedPrice = parseFloat(data2.price);
@@ -1046,7 +1061,6 @@ async function fetchLivePrice(sym){
   }
 }
 
-// ── BUG 4 FIXED: ROBUST HTTP STATUS CHECK & FAILOVER ──────────────
 async function fetchHistoricalKlines(sym){
   const pair = (sym || S.sym || 'BTC') + 'USDT';
   const url1 = 'https://api.binance.com/api/v3/klines?symbol=' + pair + '&interval=1m&limit=100';
@@ -1055,14 +1069,11 @@ async function fetchHistoricalKlines(sym){
   try {
     let res = null;
     try {
-      res = await Promise.race([
-        fetch(url1),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
-      ]);
+      res = await fetchWithTimeout(url1, 3000);
       if(!res.ok) throw new Error('HTTP ' + res.status);
     } catch(_) {
       try {
-        res = await fetch(url2);
+        res = await fetchWithTimeout(url2, 3000);
         if(!res.ok) res = null;
       } catch(__) {
         res = null;
@@ -1305,7 +1316,7 @@ function calcIndicators(){
   };
 }
 
-// ── OPEN POSITION HELPER (BUG 3 FIXED: PER-ASSET FEE WIRED) ───────
+// ── OPEN POSITION HELPER (PER-ASSET FEE SCHEDULE) ─────────────────
 function openPosition(ind, tag){
   const free = r2(S.bal - S.exp);
   const targetSize = Math.min(ind.posSizeUsd, free);
@@ -1355,7 +1366,7 @@ function openPosition(ind, tag){
   renderStats(); renderPos();
 }
 
-// ── CLOSE POSITION HELPER (BUG 3 FIXED: PER-ASSET FEE WIRED) ──────
+// ── CLOSE POSITION HELPER (PER-ASSET FEE SCHEDULE) ────────────────
 function closePosition(reason, tag){
   if(!S.pos) return;
   const slipPct = calculateSlippage(S.pos.size, 0.1, 'SELL');
@@ -1438,7 +1449,7 @@ function autoClose(){
   }
 }
 
-// ── LOCAL ENGINE ──────────────────────────────────────────────────
+// ── LOCAL ENGINE (SYNCHRONIZED WITH getMinHoldMs) ─────────────────
 function localEngine(){
   if(!S.running) return;
   
@@ -1451,7 +1462,7 @@ function localEngine(){
 
   const ind = calcIndicators(); if(!ind) return;
   updatePeakAndBreaker();
-  const minHold = S.scalpMode ? 8000 : 90000;
+  const minHold = getMinHoldMs(S.scalpMode);
   const canClose = S.pos && (Date.now() - S.posOpenedAt >= minHold);
   const heldSecs = S.pos ? Math.floor((Date.now() - S.posOpenedAt) / 1000) : 0;
 
@@ -1500,7 +1511,7 @@ function localEngine(){
   }
 }
 
-// ── AI CALL (BUG 2 FIXED: DYNAMIC MINHOLD SECONDS IN LOG) ─────────
+// ── AI CALL (SYNCHRONIZED WITH getMinHoldMs) ──────────────────────
 async function runAI(ind, canClose, heldSecs, minHoldMs = 90000){
   if(S.aiBusy || S.aiBlocked) return;
   S.aiBusy = true; S.aiBlocked = true;
