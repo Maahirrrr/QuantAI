@@ -653,18 +653,20 @@ function renderPos(){
 
 // ── ORDERBOOK ─────────────────────────────────────────────────────
 function renderOB(){
-  if(!S.price)return;
-  const p=S.price,step=p*0.0003;
+  const p=S.price||SEEDS[$('coinsel')?$('coinsel').value:'BTC']||95000;
+  const step=p*0.0003;
   let ah='',bh='';
   for(let i=3;i>=1;i--){
     const px=(p+step*i).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-    const q=(Math.random()*.3+.05).toFixed(3);const w=Math.random()*60+20;
-    ah+=`<div class="ob-row"><div class="ob-bg" style="width:${w}%;background:var(--r)"></div><span class="ob-a">$${px}</span><span class="ob-q">${q}</span></div>`;
+    const q=S.price?(Math.random()*.3+.05).toFixed(3):'—';
+    const w=S.price?(Math.random()*60+20):0;
+    ah+=`<div class="ob-row"><div class="ob-bg" style="width:${w}%;background:var(--r)"></div><span class="ob-a" style="${!S.price?'color:var(--t3)':''}">$${px}</span><span class="ob-q">${q}</span></div>`;
   }
   for(let i=1;i<=3;i++){
     const px=(p-step*i).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-    const q=(Math.random()*.3+.05).toFixed(3);const w=Math.random()*60+20;
-    bh+=`<div class="ob-row"><div class="ob-bg" style="width:${w}%;background:var(--g)"></div><span class="ob-b">$${px}</span><span class="ob-q">${q}</span></div>`;
+    const q=S.price?(Math.random()*.3+.05).toFixed(3):'—';
+    const w=S.price?(Math.random()*60+20):0;
+    bh+=`<div class="ob-row"><div class="ob-bg" style="width:${w}%;background:var(--g)"></div><span class="ob-b" style="${!S.price?'color:var(--t3)':''}">$${px}</span><span class="ob-q">${q}</span></div>`;
   }
   $('ob-asks-wrap').innerHTML=ah;$('ob-bids-wrap').innerHTML=bh;
   $('obspr').textContent='Spread $'+(step*2).toFixed(2);
@@ -674,8 +676,10 @@ function renderVol(){
   const px=S.prices,n=px.length;
   $('vbars').innerHTML=Array.from({length:24},(_,i)=>{
     const idx=n-24+i;
-    const up=(idx>0&&idx<n)?px[idx]>=px[idx-1]:Math.random()>.5;
-    return `<div style="flex:1;min-width:2px;border-radius:1px 1px 0 0;height:${20+Math.random()*80}%;background:${up?'rgba(0,192,118,.5)':'rgba(246,70,93,.45)'}"></div>`;
+    const up=S.price?((idx>0&&idx<n)?px[idx]>=px[idx-1]:Math.random()>.5):true;
+    const h=S.price?(20+Math.random()*80):5;
+    const col=S.price?(up?'rgba(0,192,118,.5)':'rgba(246,70,93,.45)'):'var(--b1)';
+    return `<div style="flex:1;min-width:2px;border-radius:1px 1px 0 0;height:${h}%;background:${col}"></div>`;
   }).join('');
 }
 
@@ -975,6 +979,8 @@ initTV('BTC');
 addLog('ai','QuantAI v13 · mobile tabs + desktop two-column · TradingView live chart');
 addLog('ai','Score 4/4→local BUY · 0/4→local SELL · 3/4→Claude AI · 1-2/4→HOLD');
 renderStats();
+renderOB();
+renderVol();
 </script>
 </body>
 </html>
