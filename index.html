@@ -574,7 +574,7 @@ const ASSET_PROFILES = {
     rsiOverbought: 64,
     minStopFloor: 0.004,
     scalpMinStop: 0.002,
-    feeRate: 0.00075,
+    feeRate: 0.00075, // 0.075%
     precision: 2
   },
   ETH: {
@@ -584,7 +584,7 @@ const ASSET_PROFILES = {
     rsiOverbought: 65,
     minStopFloor: 0.005,
     scalpMinStop: 0.0025,
-    feeRate: 0.00075,
+    feeRate: 0.00075, // 0.075%
     precision: 2
   },
   SOL: {
@@ -594,7 +594,7 @@ const ASSET_PROFILES = {
     rsiOverbought: 68,
     minStopFloor: 0.008,
     scalpMinStop: 0.004,
-    feeRate: 0.00075,
+    feeRate: 0.00075, // 0.075%
     precision: 2
   },
   BNB: {
@@ -604,7 +604,7 @@ const ASSET_PROFILES = {
     rsiOverbought: 63,
     minStopFloor: 0.0045,
     scalpMinStop: 0.0022,
-    feeRate: 0.0005,
+    feeRate: 0.0005,  // 0.05% reduced fee
     precision: 2
   }
 };
@@ -624,8 +624,6 @@ const CFG = {
   MIN_CONF: 68,
   SELL_CONF: 60
 };
-
-const FEE_RATE = 0.00075; // 0.075% standard taker exchange fee
 
 // ── STATE ─────────────────────────────────────────────────────────
 const S = {
@@ -801,7 +799,7 @@ function toggleScalp(){
   if(S.scalpMode){
     b.classList.add('btn-scalp-on');
     $('rmode').textContent = '⚡ scalp';
-    addLog('ai', '⚡ Scalp Engine ACTIVE: 2s Loop · Dynamic Conviction Sizing · Multi-Stage Trailing Profit Locks · 2:1 R:R');
+    addLog('ai', '⚡ Scalp Engine ACTIVE: 2s Loop · Dynamic Kelly Sizing · Multi-Stage Trailing Profit Locks · 2:1 R:R');
   }else{
     b.classList.remove('btn-scalp-on');
     $('rmode').textContent = 'swing';
@@ -830,7 +828,7 @@ function startCountdown(ms){
   }, 500);
 }
 
-// ── POSITION CARD ─────────────────────────────────────────────────
+// ── POSITION CARD (BUG 1 FIXED: DYNAMIC HOLD COUNTDOWN) ───────────
 function renderPos(){
   const pc = $('poscard');
   if(!S.pos){ pc.style.display = 'none'; return; }
@@ -838,7 +836,10 @@ function renderPos(){
   const pct = r2(lp / S.pos.size * 100);
   const held = Math.floor((Date.now() - S.posOpenedAt) / 1000);
   const minHold = S.pos.scalp ? 8000 : 90000;
-  const canClose = Date.now() - S.posOpenedAt >= minHold;
+  const remainingMs = Math.max(0, minHold - (Date.now() - S.posOpenedAt));
+  const remainingSecs = Math.ceil(remainingMs / 1000);
+  const canClose = remainingSecs <= 0;
+  
   const slDisplay = (S.pos.currentSl >= 0 ? '+' : '') + S.pos.currentSl.toFixed(2) + '%';
   const lockStatus = S.pos.currentSl > 0.02 ? '🔒 Lock ' + slDisplay : (S.pos.currentSl === 0.02 ? '🛡️ BreakEven' : 'SL ' + slDisplay);
   
@@ -848,7 +849,7 @@ function renderPos(){
     <div class="pos-hd">
       <svg width="7" height="7" viewBox="0 0 8 8" fill="${lp >= 0 ? 'var(--g)' : 'var(--r)'}"><circle cx="4" cy="4" r="4"/></svg>
       ${S.pos.side} ${S.pos.qty} ${S.pos.sym}${S.pos.scalp ? ' ⚡' : ''}
-      <span class="hold-chip ${canClose ? 'hold-ok' : 'hold-wait'}">${canClose ? 'Active' : 'Hold (' + Math.max(0, 8 - held) + 's)'}</span>
+      <span class="hold-chip ${canClose ? 'hold-ok' : 'hold-wait'}">${canClose ? 'Active' : 'Hold (' + remainingSecs + 's)'}</span>
     </div>
     <div class="pos-pnl" style="color:${lp >= 0 ? 'var(--g)' : 'var(--r)'}">${usd(lp, true)} <span style="font-size:13px;opacity:.6">(${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)</span></div>
     <div class="pos-meta">Entry ${usd(S.pos.entry)} · TP +${S.pos.tp.toFixed(2)}% · ${lockStatus}<br>Held ${fmtSecs(held)} · Notional ${usd(S.pos.size)} · Peak +${(S.pos.peakPct || 0).toFixed(2)}%</div>`;
@@ -1045,6 +1046,7 @@ async function fetchLivePrice(sym){
   }
 }
 
+// ── BUG 4 FIXED: ROBUST HTTP STATUS CHECK & FAILOVER ──────────────
 async function fetchHistoricalKlines(sym){
   const pair = (sym || S.sym || 'BTC') + 'USDT';
   const url1 = 'https://api.binance.com/api/v3/klines?symbol=' + pair + '&interval=1m&limit=100';
@@ -1052,7 +1054,21 @@ async function fetchHistoricalKlines(sym){
   
   try {
     let res = null;
-    try { res = await fetch(url1); } catch(_) { res = await fetch(url2); }
+    try {
+      res = await Promise.race([
+        fetch(url1),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+      ]);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+    } catch(_) {
+      try {
+        res = await fetch(url2);
+        if(!res.ok) res = null;
+      } catch(__) {
+        res = null;
+      }
+    }
+    
     if(res && res.ok){
       const klines = await res.json();
       if(Array.isArray(klines) && klines.length > 0){
@@ -1066,7 +1082,7 @@ async function fetchHistoricalKlines(sym){
       }
     }
   } catch(e){
-    console.warn('Failed to preload klines, fallback to live ticker polling:', e);
+    console.warn('Failed to preload klines:', e);
   }
   return false;
 }
@@ -1289,7 +1305,7 @@ function calcIndicators(){
   };
 }
 
-// ── OPEN POSITION HELPER ──────────────────────────────────────────
+// ── OPEN POSITION HELPER (BUG 3 FIXED: PER-ASSET FEE WIRED) ───────
 function openPosition(ind, tag){
   const free = r2(S.bal - S.exp);
   const targetSize = Math.min(ind.posSizeUsd, free);
@@ -1301,8 +1317,11 @@ function openPosition(ind, tag){
   const qty = parseFloat((targetSize / executionPrice).toFixed(6));
   const actualSize = r2(qty * executionPrice);
   
-  // Realistic Fee Deduction (0.075% on entry)
-  const entryFee = r2(actualSize * FEE_RATE);
+  // Per-Asset Fee Deduction
+  const profile = ASSET_PROFILES[S.sym] || ASSET_PROFILES.BTC;
+  const feeRate = profile.feeRate || 0.00075;
+  const entryFee = r2(actualSize * feeRate);
+  
   S.bal = r2(S.bal - entryFee);
   S.exp = r2(S.exp + actualSize);
   S.posOpenedAt = Date.now();
@@ -1313,6 +1332,7 @@ function openPosition(ind, tag){
     signalPrice: S.price,
     entry: executionPrice,
     slipPct: slipPct,
+    feeRate: feeRate,
     entryFee: entryFee,
     qty: qty,
     size: actualSize,
@@ -1326,7 +1346,7 @@ function openPosition(ind, tag){
   };
 
   const kellyNote = ind.kp ? ('Kelly: W=' + ind.kp.W.toFixed(2) + ' R=' + ind.kp.R.toFixed(2) + ' risk=' + (ind.kp.risk_pct * 100).toFixed(1) + '%') : '';
-  const slipNote = ' (Slip: +' + (slipPct * 100).toFixed(3) + '%, Fee: ' + usd(entryFee) + ')';
+  const slipNote = ' (Slip: +' + (slipPct * 100).toFixed(3) + '%, Fee ' + (feeRate*100).toFixed(3) + '%: ' + usd(entryFee) + ')';
   
   addLog('buy', tag + ' ' + S.sym + ' @ ' + usd(executionPrice) + slipNote + ' · ' + kellyNote);
   addLog('buy', 'Qty: ' + qty + ' ' + S.sym + ' (' + usd(actualSize) + ') · Target: +' + ind.tpPct.toFixed(2) + '% · Stop: -' + ind.slPct.toFixed(2) + '% (R:R ' + ind.rrRatio.toFixed(1) + ':1)');
@@ -1335,23 +1355,24 @@ function openPosition(ind, tag){
   renderStats(); renderPos();
 }
 
-// ── CLOSE POSITION HELPER ─────────────────────────────────────────
+// ── CLOSE POSITION HELPER (BUG 3 FIXED: PER-ASSET FEE WIRED) ──────
 function closePosition(reason, tag){
   if(!S.pos) return;
   const slipPct = calculateSlippage(S.pos.size, 0.1, 'SELL');
   const executionPrice = r2(S.price * (1 - slipPct));
   
-  // Realized Gross and Net calculations with realistic trading fees
+  // Realized Gross and Net calculations with asset-specific feeRate
   const grossDiff = (executionPrice - S.pos.entry) * S.pos.qty * (S.pos.side === 'SELL' ? -1 : 1);
   const grossPnl = r2(grossDiff);
   const exitNotional = r2(executionPrice * S.pos.qty);
-  const exitFee = r2(exitNotional * FEE_RATE);
+  const profile = ASSET_PROFILES[S.pos.sym] || ASSET_PROFILES.BTC;
+  const feeRate = S.pos.feeRate || profile.feeRate || 0.00075;
+  const exitFee = r2(exitNotional * feeRate);
   const totalFees = r2(S.pos.entryFee + exitFee);
-  const totalTradePnl = r2(grossPnl - totalFees); // Overall net P&L including entry + exit fees
+  const totalTradePnl = r2(grossPnl - totalFees);
   const pct = r2((totalTradePnl / S.pos.size) * 100);
   const isWin = totalTradePnl >= 0;
   
-  // S.bal was already debited S.pos.entryFee on entry, so we credit grossPnl - exitFee
   S.bal = r2(S.bal + grossPnl - exitFee);
   S.pnl = r2(S.pnl + totalTradePnl);
   S.exp = Math.max(0, r2(S.exp - S.pos.size));
@@ -1449,7 +1470,7 @@ function localEngine(){
   const wantAI = !S.scalpMode && ((ind.smooth === 4 && !S.pos) || (S.pos && canClose && ind.smooth <= 1));
   if(wantAI && !S.aiBusy && !S.aiBlocked){
     $('rmode').textContent = 'claude AI';
-    runAI(ind, canClose, heldSecs); return;
+    runAI(ind, canClose, heldSecs, minHold); return;
   }
 
   // ── ENTRIES
@@ -1479,8 +1500,8 @@ function localEngine(){
   }
 }
 
-// ── AI CALL ──────────────────────────────────────────────────────
-async function runAI(ind, canClose, heldSecs){
+// ── AI CALL (BUG 2 FIXED: DYNAMIC MINHOLD SECONDS IN LOG) ─────────
+async function runAI(ind, canClose, heldSecs, minHoldMs = 90000){
   if(S.aiBusy || S.aiBlocked) return;
   S.aiBusy = true; S.aiBlocked = true;
   const safeSize = Math.min(ind.posSizeUsd, r2(S.bal - S.exp));
@@ -1552,7 +1573,10 @@ async function runAI(ind, canClose, heldSecs){
       if(action === 'BUY' && conf < CFG.MIN_CONF) why = 'Hold · conf ' + conf + '% <' + CFG.MIN_CONF + '%';
       if(action === 'BUY' && S.pos) why = 'Hold · position already open';
       if(action === 'SELL' && !S.pos) why = 'Hold · no position';
-      if(action === 'SELL' && !canClose) why = 'Hold · min hold (' + fmtSecs(Math.max(0, 120 - heldSecs)) + ' left)';
+      if(action === 'SELL' && !canClose){
+        const minHoldSecs = Math.round(minHoldMs / 1000);
+        why = 'Hold · min hold (' + fmtSecs(Math.max(0, minHoldSecs - heldSecs)) + ' left)';
+      }
       addLog('hold', why);
     }
     $('fst').textContent = 'Claude: ' + action + ' ' + conf + '% · next ' + (CFG.AI_BASE/1000) + 's';
@@ -1583,7 +1607,7 @@ async function startBot(){
   
   addLog('ai', 'Bot started on LIVE Binance data feed · ' + S.sym + '/USDT · balance ' + usd(S.bal));
   if(S.scalpMode){
-    addLog('ai', '⚡ SCALP MODE: 2s Loop · Dynamic Kelly Sizing · Real-time Fees (0.075%) & Slippage · Trailing Profit Locks');
+    addLog('ai', '⚡ SCALP MODE: 2s Loop · Dynamic Kelly Sizing · Real-time Fees & Slippage · Trailing Profit Locks');
   }else{
     addLog('ai', 'SWING MODE: 8s Loop · 5-Signal Ensemble · Regime-aware TP/SL · AI Confirmation on 4/5');
   }
