@@ -106,7 +106,7 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
 
 /* ═══ CHART PANEL ════════════════════════════════════════════ */
 .chart-bar{
-  display:flex;align-items:center;gap:4px;padding:8px 12px;
+  display:flex;align-items:center;gap:4px;padding:6px 12px;
   border-bottom:1px solid var(--b1);background:var(--s1);flex-shrink:0;
   overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
   scrollbar-width:none;
@@ -125,7 +125,7 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
 
 /* ═══ SIGNALS ════════════════════════════════════════════════ */
 .sig-strip{flex-shrink:0;background:var(--s1);border-top:1px solid var(--b1)}
-.sig-hdr{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--b1)}
+.sig-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--b1)}
 .sig-title{font-size:10px;color:var(--t2);letter-spacing:1px;text-transform:uppercase;white-space:nowrap}
 .pips{display:flex;gap:4px;align-items:center;flex-shrink:0}
 .pip{width:9px;height:9px;border-radius:50%;background:var(--b1);border:1px solid var(--b2);transition:all .3s}
@@ -134,18 +134,18 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
 .score-badge{font-family:var(--mono);font-size:10.5px;font-weight:700;margin-left:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .score-badge.G{color:var(--g)}.score-badge.R{color:var(--r)}.score-badge.A{color:var(--a)}
 .sig-grid{display:grid;grid-template-columns:1fr 1fr}
-.sig-cell{padding:11px 14px;border-right:1px solid var(--b1)}
+.sig-cell{padding:8px 12px;border-right:1px solid var(--b1)}
 .sig-cell:nth-child(2n){border-right:none}
 .sig-cell:nth-child(n+3){border-top:1px solid var(--b1)}
-.sig-name{font-size:10.5px;color:var(--t2);margin-bottom:5px}
-.sig-val{font-family:var(--mono);font-size:13.5px;font-weight:700;color:var(--t1);margin-bottom:6px}
+.sig-name{font-size:10px;color:var(--t2);margin-bottom:4px}
+.sig-val{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--t1);margin-bottom:5px}
 .sig-val.G{color:var(--g)}.sig-val.R{color:var(--r)}.sig-val.A{color:var(--a)}
 .sig-track{height:3px;background:var(--b1);border-radius:2px;overflow:hidden}
 .sig-bar{height:100%;border-radius:2px;transition:width .5s,background .5s}
 
 /* ═══ LOG ════════════════════════════════════════════════════ */
 .log-shell{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
-.log-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s1)}
+.log-hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s1)}
 .log-hdr-l{font-size:10px;color:var(--t2);letter-spacing:1px;text-transform:uppercase}
 #lognet{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--t3)}
 #logwrap,#logwrap-mobile{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0}
@@ -157,7 +157,7 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
   height:100%;padding:24px;text-align:center;
   color:var(--t3);font-size:11.5px;font-family:var(--ui);line-height:1.5;
 }
-.log-row{display:flex;gap:9px;padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.025);align-items:flex-start}
+.log-row{display:flex;gap:6px;padding:5px 14px;border-bottom:1px solid rgba(255,255,255,.025);align-items:flex-start}
 .log-row.lbuy{background:rgba(0,192,118,.025)}.log-row.lsell{background:rgba(246,70,93,.025)}
 .log-row.lai{background:rgba(78,143,255,.025)}.log-row.lerr{background:rgba(246,70,93,.03)}
 .log-time{color:var(--t3);font-family:var(--mono);font-size:10px;flex-shrink:0;padding-top:2px;min-width:38px}
@@ -303,8 +303,8 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
 }
 
 /* log-in-chart only visible on desktop */
-.log-in-chart{display:none;flex-direction:column;height:150px;border-top:1px solid var(--b1);flex-shrink:0}
-@media(min-width:1440px){.log-in-chart{height:180px}}
+.log-in-chart{display:none;flex-direction:column;height:120px;border-top:1px solid var(--b1);flex-shrink:0;flex:none}
+@media(min-width:1440px){.log-in-chart{height:140px}}
 </style>
 </head>
 <body>
