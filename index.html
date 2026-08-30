@@ -594,9 +594,13 @@ const $=id=>document.getElementById(id);
 const ts=()=>new Date().toTimeString().slice(0,8);
 const r2=n=>Math.round(n*100)/100;
 const usd=(n,sign=false)=>{
+  const isNeg=n<0;
   const abs=Math.abs(n);
   const s='$'+abs.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:abs<1?4:2});
-  return sign?(n>=0?'+':'-')+s:s;
+  if(sign){
+    return (isNeg?'-':'+')+s;
+  }
+  return (isNeg?'-':'')+s;
 };
 const fmtSecs=s=>s>=60?Math.floor(s/60)+'m '+(s%60)+'s':s+'s';
 function safeParseError(raw){
@@ -618,22 +622,21 @@ function renderLog(){
   const dw=$('logwrap'),mw=$('logwrap-mobile');
   if(dw)dw.innerHTML=html;
   if(mw)mw.innerHTML=html;
-  const n=S.pnl;
-  $('lognet').textContent='net '+(n>=0?'+':'')+usd(n);
-  $('lognet').style.color=n>0?'var(--g)':n<0?'var(--r)':'var(--t3)';
+  $('lognet').textContent='net '+usd(S.pnl,true);
+  $('lognet').style.color=S.pnl>0?'var(--g)':S.pnl<0?'var(--r)':'var(--t3)';
 }
 
 // ── STATS ─────────────────────────────────────────────────────────
 function renderStats(){
   const pEl=$('rpnl');
-  pEl.textContent=(S.pnl>=0?'+':'')+usd(S.pnl);
+  pEl.textContent=usd(S.pnl,true);
   pEl.className='sb-v'+(S.pnl>0?' G':S.pnl<0?' R':'');
   $('rbal').textContent=usd(S.bal);
-  $('rfree').textContent=usd(S.bal-S.exp);
+  $('rfree').textContent=usd(Math.max(0,S.bal-S.exp));
   $('rtrades').textContent=S.trades;
   $('rwin').textContent=S.trades>0?Math.round(S.wins/S.trades*100)+'%':'—';
   const tbEl=$('tb-pnl');
-  tbEl.textContent=(S.pnl>=0?'+':'')+usd(S.pnl);
+  tbEl.textContent=usd(S.pnl,true);
   tbEl.className='ns-v'+(S.pnl>0?' G':S.pnl<0?' R':'');
   $('tb-bal').textContent=usd(S.bal);
   $('tb-trades').textContent=S.trades;
@@ -737,11 +740,12 @@ function renderTradeList(){
   
   wrap.innerHTML = list.map(t => {
     const isWin = t.pnl >= 0;
-    const pnlSign = isWin ? '+' : '';
     const colClass = isWin ? 'G' : 'R';
     const rowClass = isWin ? 'p-win' : 'p-loss';
     const tagClass = t.side === 'BUY' ? 'tr-buy' : 'tr-sell';
     const scalpBadge = t.scalp ? '<span class="tr-tag tr-scalp">⚡</span>' : '';
+    const pnlStr = usd(t.pnl, true);
+    const pnlPctStr = '(' + (t.pnlPct >= 0 ? '+' : '') + t.pnlPct.toFixed(2) + '%)';
     
     return '<div class="trade-row ' + rowClass + '">' +
       '<div>' +
@@ -756,8 +760,8 @@ function renderTradeList(){
         '<div class="tr-px">' + usd(t.entry) + ' → ' + usd(t.exit) + '</div>' +
       '</div>' +
       '<div class="tr-pnl">' +
-        '<div class="tr-pnl-val ' + colClass + '">' + pnlSign + usd(t.pnl) + '</div>' +
-        '<div class="tr-pnl-pct ' + colClass + '">(' + pnlSign + t.pnlPct.toFixed(2) + '%)</div>' +
+        '<div class="tr-pnl-val ' + colClass + '">' + pnlStr + '</div>' +
+        '<div class="tr-pnl-pct ' + colClass + '">' + pnlPctStr + '</div>' +
         '<div class="tr-reason">' + t.reason + '</div>' +
       '</div>' +
     '</div>';
@@ -958,7 +962,8 @@ function autoClose(){
     const fp=lp;
     const isTp=pct>=S.pos.tp;
     const reason=isTp?'Take Profit (TP)':'Stop Loss (SL)';
-    S.pnl=r2(S.pnl+fp);S.bal=r2(S.bal+S.pos.size+fp);
+    S.pnl=r2(S.pnl+fp);
+    S.bal=r2(S.bal+fp); // ONLY ADD THE REALIZED P&L, DO NOT ADD S.pos.size!
     S.exp=Math.max(0,r2(S.exp-S.pos.size));
     S.trades++;if(fp>0)S.wins++;S.pnlHist.push(S.pnl);
     S.tradeHistory.push({win:fp>0,pnl:fp});
@@ -982,7 +987,8 @@ function openPosition(ind,tag){
   const actualSize=Math.min(ind.posSizeUsd,free);
   if(actualSize<1){addLog('hold','Insufficient free margin for entry.');return;}
   const qty=parseFloat((actualSize/S.price).toFixed(8));
-  S.exp=r2(S.exp+actualSize);S.posOpenedAt=Date.now();
+  S.exp=r2(S.exp+actualSize);
+  S.posOpenedAt=Date.now();
   S.pos={sym:S.sym,side:'BUY',entry:S.price,qty,size:actualSize,tp:ind.tpPct,sl:ind.slPct,scalp:S.scalpMode};
   const W=ind.kp.W, R=ind.kp.R, kelly_f=ind.kp.kelly_f, risk_pct=ind.kp.risk_pct;
   const capNote=ind.isCapped?' (15% CAP)':' ';
@@ -999,7 +1005,8 @@ function openPosition(ind,tag){
 function closePosition(reason,tag){
   const fp=r2((S.price-S.pos.entry)*S.pos.qty*(S.pos.side==='SELL'?-1:1));
   const pct=r2(fp/S.pos.size*100);
-  S.pnl=r2(S.pnl+fp);S.bal=r2(S.bal+S.pos.size+fp);
+  S.pnl=r2(S.pnl+fp);
+  S.bal=r2(S.bal+fp); // ONLY ADD THE REALIZED P&L, DO NOT ADD S.pos.size!
   S.exp=Math.max(0,r2(S.exp-S.pos.size));
   S.trades++;if(fp>0)S.wins++;S.pnlHist.push(S.pnl);
   S.tradeHistory.push({win:fp>0,pnl:fp});
@@ -1078,18 +1085,18 @@ async function runAI(ind,canClose,heldSecs){
   setStatus('on','AI');
   $('fst').innerHTML='<span class="spin"></span>Claude confirming signal…';
   addLog('ai','Claude called · score ' + ind.smooth + '/5 · $' + S.price.toFixed(2));
-  const prompt='Quant paper trader. Score ' + ind.smooth + '/5 ambiguous signal.\\n\\n' +
-    S.sym + '/USDT:\\n' +
-    'EMA(5/20/50): ' + ind.e5.toFixed(2) + '/' + ind.e20.toFixed(2) + '/' + ind.e50.toFixed(2) + ' → ' + (ind.emaBull?'BULL':ind.emaBear?'BEAR':'MIXED') + '\\n' +
-    'RSI(14): ' + ind.rsi.toFixed(1) + ' ' + (ind.rsiOS?'OVERSOLD':ind.rsiOB?'OVERBOUGHT':'NEUTRAL') + '\\n' +
-    'ATR: ' + ind.atrPct.toFixed(3) + '% ' + (ind.atrOk?'LOW-VOL':'HIGH-VOL') + '\\n' +
-    'MACD: ' + (ind.macdBull?'BULL CROSS':ind.macdBear?'BEAR CROSS':'FLAT') + '\\n' +
-    'Price Z-score (20p): ' + ind.priceZ.toFixed(2) + '\\n' +
-    'Price: $' + S.price.toFixed(2) + '\\n\\n' +
-    'Portfolio: Bal=$' + S.bal.toFixed(2) + ' Free=$' + (S.bal-S.exp).toFixed(2) + '\\n' +
-    'Position: ' + (S.pos?(S.pos.side + '@$' + S.pos.entry.toFixed(2) + ' held=' + heldSecs + 's canClose=' + canClose):'NONE') + '\\n' +
-    'TP=+' + ind.tpPct + '% SL=-' + ind.slPct + '% Size=$' + safeSize.toFixed(2) + '\\n\\n' +
-    'BUY if conf≥68 and no position. SELL if position and canClose=' + canClose + ' and conf≥60. Else HOLD.\\n\\n' +
+  const prompt='Quant paper trader. Score ' + ind.smooth + '/5 ambiguous signal.\n\n' +
+    S.sym + '/USDT:\n' +
+    'EMA(5/20/50): ' + ind.e5.toFixed(2) + '/' + ind.e20.toFixed(2) + '/' + ind.e50.toFixed(2) + ' → ' + (ind.emaBull?'BULL':ind.emaBear?'BEAR':'MIXED') + '\n' +
+    'RSI(14): ' + ind.rsi.toFixed(1) + ' ' + (ind.rsiOS?'OVERSOLD':ind.rsiOB?'OVERBOUGHT':'NEUTRAL') + '\n' +
+    'ATR: ' + ind.atrPct.toFixed(3) + '% ' + (ind.atrOk?'LOW-VOL':'HIGH-VOL') + '\n' +
+    'MACD: ' + (ind.macdBull?'BULL CROSS':ind.macdBear?'BEAR CROSS':'FLAT') + '\n' +
+    'Price Z-score (20p): ' + ind.priceZ.toFixed(2) + '\n' +
+    'Price: $' + S.price.toFixed(2) + '\n\n' +
+    'Portfolio: Bal=$' + S.bal.toFixed(2) + ' Free=$' + (S.bal-S.exp).toFixed(2) + '\n' +
+    'Position: ' + (S.pos?(S.pos.side + '@$' + S.pos.entry.toFixed(2) + ' held=' + heldSecs + 's canClose=' + canClose):'NONE') + '\n' +
+    'TP=+' + ind.tpPct + '% SL=-' + ind.slPct + '% Size=$' + safeSize.toFixed(2) + '\n\n' +
+    'BUY if conf≥68 and no position. SELL if position and canClose=' + canClose + ' and conf≥60. Else HOLD.\n\n' +
     'JSON only: {"action":"HOLD","confidence":72,"reason":"6 words max","strategy":"trend","tp":' + ind.tpPct + ',"sl":' + ind.slPct + '}';
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{
@@ -1203,7 +1210,7 @@ function stopBot(){
   $('cdfill').style.width='0%';$('cdfill2').style.width='0%';
   $('rnext').textContent='—';
   const wr=S.trades?Math.round(S.wins/S.trades*100)+'%':'—';
-  const sum='Stopped · P&L ' + (S.pnl>=0?'+':'') + usd(S.pnl) + ' · ' + S.trades + ' trades · WR ' + wr;
+  const sum='Stopped · P&L ' + usd(S.pnl,true) + ' · ' + S.trades + ' trades · WR ' + wr;
   $('fst').textContent=sum;addLog('ai',sum);
 }
 
