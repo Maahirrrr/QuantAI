@@ -156,6 +156,7 @@ $$\text{Position Size (USD): } \text{size} = \min\left(\frac{\text{Balance} \tim
 | **`S`** | **Start Bot** |
 | **`X`** | **Stop Bot** |
 | **`T`** | **Top-Up (+$500 Demo Balance)** |
+| **`K`** | **Top-Up (+$100k Demo Balance)** |
 | **`1` – `6`** | Switch Resolution (`1m`, `5m`, `15m`, `1h`, `4h`, `1D`) |
 
 ---

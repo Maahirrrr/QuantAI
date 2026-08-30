@@ -543,8 +543,11 @@ html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--ui)
     <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
     Stop <span class="k-hint">X</span>
   </button>
-  <button class="btn btn-topup" onclick="topUp()">
+  <button class="btn btn-topup" onclick="topUp(500)">
     +$500 <span class="k-hint">T</span>
+  </button>
+  <button class="btn btn-topup" onclick="topUp(100000)" title="Add $100,000 demo capital">
+    +$100k <span class="k-hint">K</span>
   </button>
   <button class="btn btn-scalp" id="bscalp" onclick="toggleScalp()">
     ⚡ Scalp Mode
@@ -1646,14 +1649,14 @@ function stopBot(){
   $('fst').textContent = sum; addLog('ai', sum);
 }
 
-function topUp(){
-  const amount = 500;
-  S.bal = r2(S.bal + amount);
-  S.peakEquity = r2(S.peakEquity + amount);
+function topUp(amount = 500){
+  const addAmt = typeof amount === 'number' ? amount : 500;
+  S.bal = r2(S.bal + addAmt);
+  S.peakEquity = r2(S.peakEquity + addAmt);
   S.topups++;
   renderStats();
-  addLog('ai', 'Top-up #' + S.topups + ' · +' + usd(amount) + ' demo · balance ' + usd(S.bal) + ' · peak_equity now ' + usd(S.peakEquity));
-  $('fst').textContent = '+' + usd(amount) + ' demo · balance ' + usd(S.bal);
+  addLog('ai', 'Top-up #' + S.topups + ' · +' + usd(addAmt) + ' demo · balance ' + usd(S.bal) + ' · peak_equity now ' + usd(S.peakEquity));
+  $('fst').textContent = '+' + usd(addAmt) + ' demo · balance ' + usd(S.bal);
 }
 
 // ── KEYBOARD SHORTCUTS ────────────────────────────────────────────
@@ -1662,7 +1665,8 @@ document.addEventListener('keydown', (e) => {
   if(tag === 'select' || tag === 'input' || tag === 'textarea') return;
   if(e.key === 's' || e.key === 'S'){ if(!$('bstart').disabled) startBot(); }
   else if(e.key === 'x' || e.key === 'X'){ if(!$('bstop').disabled) stopBot(); }
-  else if(e.key === 't' || e.key === 'T'){ topUp(); }
+  else if(e.key === 't' || e.key === 'T'){ topUp(500); }
+  else if(e.key === 'k' || e.key === 'K'){ topUp(100000); }
   else if(e.key >= '1' && e.key <= '6'){
     const btns = document.querySelectorAll('.ibtn');
     const idx = parseInt(e.key, 10) - 1;
